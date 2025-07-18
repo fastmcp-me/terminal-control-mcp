@@ -23,11 +23,15 @@
    python test_basic.py
    ```
 
-3. **Start the server**
+3. **Test the installation**
    ```bash
-   # Start the MCP server
-   python main.py
+   # Test the package installation
+   interactive-automation-mcp --help
+   # Or test the module
+   python -m interactive_automation_mcp.main --help
    ```
+   
+   **Note**: MCP servers are automatically started by MCP clients - no manual startup needed.
 
 ## Claude Code Integration
 

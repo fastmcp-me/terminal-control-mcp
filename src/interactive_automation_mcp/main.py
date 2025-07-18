@@ -15,13 +15,9 @@ import mcp.server.stdio
 import mcp.types as types
 
 # Import our components
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
-
-from interactive_automation_mcp.session_manager import SessionManager
-from interactive_automation_mcp.automation_engine import AutomationEngine
-from interactive_automation_mcp.security import SecurityManager
+from .session_manager import SessionManager
+from .automation_engine import AutomationEngine
+from .security import SecurityManager
 
 # Configure logging
 logging.basicConfig(

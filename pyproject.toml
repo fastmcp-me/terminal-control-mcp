@@ -57,7 +57,7 @@ Repository = "https://github.com/yourusername/interactive-automation-mcp"
 Issues = "https://github.com/yourusername/interactive-automation-mcp/issues"
 
 [project.scripts]
-interactive-automation-mcp = "main:main_sync"
+interactive-automation-mcp = "interactive_automation_mcp.main:main_sync"
 
 [tool.setuptools.packages.find]
 where = ["src"]

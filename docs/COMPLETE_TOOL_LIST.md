@@ -64,34 +64,34 @@
 
 ## Usage Examples
 
-### **SSH Automation**
+### **Universal Command Execution**
 ```
-"Connect to prod.example.com and check disk usage"
-→ Uses: ssh_connect_with_auth, execute_ssh_commands
+"Execute SSH command to connect and check disk usage"
+→ Uses: execute_command with 'ssh user@host', then expect_and_respond
 ```
 
-### **Database Debugging**
+### **Database Operations**
 ```
-"Connect to my MySQL database and find slow queries"
-→ Uses: database_connect_interactive, execute_sql
+"Connect to MySQL database and run queries"
+→ Uses: execute_command with 'mysql -u root -p', then multi_step_automation
 ```
 
 ### **Python Debugging**
 ```
-"Debug my Python script with breakpoints at line 15 and main function"
-→ Uses: python_debug_session
+"Debug Python script with PDB"
+→ Uses: execute_command with 'python -m pdb script.py', then expect_and_respond
 ```
 
 ### **Process Control**
 ```
-"Send Ctrl+C to interrupt the running process in session abc123"
-→ Uses: send_signal
+"Send input to interrupt running process"
+→ Uses: expect_and_respond with appropriate patterns
 ```
 
 ### **Multi-Step Automation**
 ```
-"SSH to server, run diagnostics, save results to file"
-→ Uses: ssh_connect_with_auth, multi_step_automation
+"Execute complex automation workflow"
+→ Uses: execute_command, then multi_step_automation for sequences
 ```
 
 ## Previously Missing Tools (Now Added)

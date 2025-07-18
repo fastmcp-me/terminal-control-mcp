@@ -99,9 +99,8 @@ def test_imports():
     print("\nTesting module imports...")
     
     try:
-        # Import from root main.py since we unified the files
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
-        from main import InteractiveAutomationServer
+        # Import from package structure
+        from interactive_automation_mcp.main import InteractiveAutomationServer
         print("✓ Main server class imported successfully")
     except ImportError as e:
         print(f"✗ Failed to import main server: {e}")

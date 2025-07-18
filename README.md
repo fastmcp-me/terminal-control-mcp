@@ -59,7 +59,7 @@ Once installed, configure the MCP server in your AI assistant:
      "mcpServers": {
        "interactive-automation": {
          "command": "/path/to/interactive-automation-mcp/.venv/bin/python",
-         "args": ["-m", "main"],
+         "args": ["-m", "interactive_automation_mcp.main"],
          "cwd": "/path/to/interactive-automation-mcp"
        }
      }
@@ -81,7 +81,7 @@ Once installed, configure the MCP server in your AI assistant:
      "mcp.servers": {
        "interactive-automation": {
          "command": "/path/to/interactive-automation-mcp/.venv/bin/python",
-         "args": ["-m", "main"],
+         "args": ["-m", "interactive_automation_mcp.main"],
          "cwd": "/path/to/interactive-automation-mcp"
        }
      }
@@ -160,7 +160,7 @@ For containerized environments, you can run the MCP server in a container:
 **Debug commands:**
 ```bash
 # Test server manually (for debugging only)
-/path/to/.venv/bin/python main.py
+/path/to/.venv/bin/python -m interactive_automation_mcp.main
 
 # Check installation
 pip show interactive-automation-mcp
@@ -276,13 +276,15 @@ ls -la /path/to/.venv/bin/interactive-automation-mcp
 
 ```
 interactive-automation-mcp/
-├── main.py                     # Main entry point
 ├── pyproject.toml              # Modern Python project configuration
 ├── README.md                   # This file
 ├── src/
 │   └── interactive_automation_mcp/
-│       ├── main.py            # Core MCP server
+│       ├── __init__.py        # Package initialization
+│       ├── main.py            # Main MCP server entry point
 │       ├── session_manager.py # Session lifecycle management
+│       ├── automation_engine.py # Universal automation engine
+│       ├── interactive_session.py # Session handling
 │       ├── security.py        # Security controls
 │       └── ...                # Other modules
 ├── tests/                      # Test suite
