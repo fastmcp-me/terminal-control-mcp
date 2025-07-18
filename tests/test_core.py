@@ -48,12 +48,12 @@ def test_security_manager():
         else:
             print(f"✗ Safe command blocked: {cmd}")
     
-    print("\nTesting dangerous commands:")
+    print("\nTesting universal command policy:")
     for cmd in dangerous_commands:
-        if not security_manager._validate_command(cmd):
-            print(f"✓ Dangerous command blocked: {cmd}")
+        if security_manager._validate_command(cmd):
+            print(f"✓ Universal design: All commands allowed (user responsible): {cmd}")
         else:
-            print(f"✗ Dangerous command allowed: {cmd}")
+            print(f"✗ Command blocked: {cmd}")
     
     # Test path validation
     safe_paths = ["./test.txt", "/home/user/file.txt", "data/config.json"]
@@ -66,12 +66,12 @@ def test_security_manager():
         else:
             print(f"✗ Safe path blocked: {path}")
     
-    print("\nTesting dangerous paths:")
+    print("\nTesting universal path policy:")
     for path in dangerous_paths:
-        if not security_manager._validate_path(path):
-            print(f"✓ Dangerous path blocked: {path}")
+        if security_manager._validate_path(path):
+            print(f"✓ Universal design: All paths allowed (user responsible): {path}")
         else:
-            print(f"✗ Dangerous path allowed: {path}")
+            print(f"✗ Path blocked: {path}")
     
     # Test rate limiting
     print("\nTesting rate limiting:")

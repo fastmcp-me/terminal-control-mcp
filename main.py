@@ -21,9 +21,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from interactive_automation_mcp.session_manager import SessionManager
 from interactive_automation_mcp.automation_engine import AutomationEngine
-from interactive_automation_mcp.ssh_automation import SSHAutomation
-from interactive_automation_mcp.database_automation import DatabaseAutomation
-from interactive_automation_mcp.debugging_automation import DebuggingAutomation
 from interactive_automation_mcp.security import SecurityManager
 
 # Configure logging
@@ -41,10 +38,17 @@ class InteractiveAutomationServer:
         self.server = Server("interactive-automation")
         self.session_manager = SessionManager()
         self.automation_engine = AutomationEngine(self.session_manager)
-        self.ssh_automation = SSHAutomation(self.session_manager, self.automation_engine)
-        self.db_automation = DatabaseAutomation(self.session_manager, self.automation_engine)
-        self.debug_automation = DebuggingAutomation(self.session_manager, self.automation_engine)
         self.security_manager = SecurityManager()
+        
+        # Tool dispatch table for clean routing
+        self._tool_handlers = {
+            "create_interactive_session": self._handle_create_session,
+            "list_sessions": self._handle_list_sessions,
+            "destroy_session": self._handle_destroy_session,
+            "expect_and_respond": self._handle_expect_and_respond,
+            "multi_step_automation": self._handle_multi_step_automation,
+            "execute_command": self._handle_execute_command,
+        }
         
         self._setup_handlers()
     
@@ -155,183 +159,56 @@ class InteractiveAutomationServer:
                 
                 # High-Level Automation Tools
                 types.Tool(
-                    name="ssh_connect_with_auth",
-                    description="Connect to SSH server with automated authentication",
-                    inputSchema={
-                        "type": "object", 
-                        "properties": {
-                            "host": {"type": "string"},
-                            "username": {"type": "string"},
-                            "auth_method": {"type": "string", "enum": ["password", "key"]},
-                            "password": {"type": "string"},
-                            "key_path": {"type": "string"},
-                            "key_passphrase": {"type": "string"},
-                            "port": {"type": "integer", "default": 22},
-                            "post_connect_commands": {
-                                "type": "array",
-                                "items": {"type": "string"}
-                            }
-                        },
-                        "required": ["host", "username", "auth_method"]
-                    }
-                ),
-                
-                types.Tool(
-                    name="database_connect_interactive",
-                    description="Connect to database with interactive authentication",
+                    name="execute_command",
+                    description="Execute any command with optional automation patterns",
                     inputSchema={
                         "type": "object",
                         "properties": {
-                            "db_type": {"type": "string", "enum": ["mysql", "postgresql"]},
-                            "host": {"type": "string"},
-                            "port": {"type": "integer"},
-                            "username": {"type": "string"},
-                            "password": {"type": "string"},
-                            "database": {"type": "string"},
-                            "initial_commands": {
-                                "type": "array",
-                                "items": {"type": "string"}
-                            }
-                        },
-                        "required": ["db_type", "host", "username", "password"]
-                    }
-                ),
-                
-                types.Tool(
-                    name="gdb_debug_session",
-                    description="Start GDB debugging session with intelligent automation",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {
-                            "program": {"type": "string"},
-                            "core_file": {"type": "string"},
-                            "args": {"type": "array", "items": {"type": "string"}},
-                            "breakpoints": {"type": "array", "items": {"type": "string"}}
-                        },
-                        "required": ["program"]
-                    }
-                ),
-                
-                types.Tool(
-                    name="analyze_crash",
-                    description="Perform comprehensive crash analysis using GDB",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {
-                            "session_id": {"type": "string"},
-                            "analysis_depth": {
+                            "command": {
                                 "type": "string",
-                                "enum": ["basic", "comprehensive", "deep"],
-                                "default": "comprehensive"
-                            }
-                        },
-                        "required": ["session_id"]
-                    }
-                ),
-                
-                types.Tool(
-                    name="python_debug_session",
-                    description="Start Python debugging session with PDB",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {
-                            "script": {
+                                "description": "Command to execute (e.g., 'ssh user@host', 'mysql -u root -p', 'gdb program')"
+                            },
+                            "command_args": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Additional command arguments as separate array items"
+                            },
+                            "automation_patterns": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "pattern": {"type": "string", "description": "Regex pattern to match"},
+                                        "response": {"type": "string", "description": "Response to send when pattern matches"},
+                                        "secret": {"type": "boolean", "default": false, "description": "Whether response contains sensitive data"}
+                                    },
+                                    "required": ["pattern", "response"]
+                                },
+                                "description": "Optional automation patterns to handle (e.g., password prompts, confirmations, any interactive prompts)"
+                            },
+                            "execution_timeout": {
+                                "type": "integer",
+                                "default": 30,
+                                "description": "Timeout in seconds for command execution"
+                            },
+                            "follow_up_commands": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Commands to execute after successful command execution"
+                            },
+                            "environment": {
+                                "type": "object",
+                                "description": "Environment variables for the session"
+                            },
+                            "working_directory": {
                                 "type": "string",
-                                "description": "Path to Python script to debug"
-                            },
-                            "breakpoints": {
-                                "type": "array",
-                                "description": "List of breakpoints to set (e.g., ['main.py:10', 'function_name'])",
-                                "items": {"type": "string"}
+                                "description": "Working directory for the command"
                             }
                         },
-                        "required": ["script"]
+                        "required": ["command"]
                     }
                 ),
                 
-                # Additional Session Control Tools
-                types.Tool(
-                    name="send_input",
-                    description="Send input to an active session",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {
-                            "session_id": {"type": "string"},
-                            "input_text": {"type": "string"},
-                            "add_newline": {"type": "boolean", "default": True}
-                        },
-                        "required": ["session_id", "input_text"]
-                    }
-                ),
-                
-                types.Tool(
-                    name="get_session_output",
-                    description="Get output from session buffer",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {
-                            "session_id": {"type": "string"},
-                            "lines": {"type": "integer", "description": "Number of lines to retrieve (all if not specified)"}
-                        },
-                        "required": ["session_id"]
-                    }
-                ),
-                
-                types.Tool(
-                    name="send_signal",
-                    description="Send signal to session process (e.g., Ctrl+C)",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {
-                            "session_id": {"type": "string"},
-                            "signal": {"type": "integer", "description": "Signal number (2=SIGINT/Ctrl+C, 9=SIGKILL, 15=SIGTERM)"}
-                        },
-                        "required": ["session_id", "signal"]
-                    }
-                ),
-                
-                types.Tool(
-                    name="clear_session_buffer",
-                    description="Clear session output buffer",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {
-                            "session_id": {"type": "string"}
-                        },
-                        "required": ["session_id"]
-                    }
-                ),
-                
-                types.Tool(
-                    name="execute_ssh_commands",
-                    description="Execute commands on an established SSH session",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {
-                            "session_id": {"type": "string"},
-                            "commands": {
-                                "type": "array",
-                                "items": {"type": "string"}
-                            },
-                            "timeout": {"type": "integer", "default": 30}
-                        },
-                        "required": ["session_id", "commands"]
-                    }
-                ),
-                
-                types.Tool(
-                    name="execute_sql",
-                    description="Execute SQL query on established database session",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {
-                            "session_id": {"type": "string"},
-                            "query": {"type": "string"},
-                            "timeout": {"type": "integer", "default": 60}
-                        },
-                        "required": ["session_id", "query"]
-                    }
-                )
             ]
         
         @self.server.call_tool()
@@ -348,39 +225,10 @@ class InteractiveAutomationServer:
                         text=f"Security violation: Tool call rejected"
                     )]
                 
-                # Route to appropriate handler
-                if name == "create_interactive_session":
-                    result = await self._handle_create_session(arguments)
-                elif name == "list_sessions":
-                    result = await self._handle_list_sessions(arguments)
-                elif name == "destroy_session":
-                    result = await self._handle_destroy_session(arguments)
-                elif name == "expect_and_respond":
-                    result = await self._handle_expect_and_respond(arguments)
-                elif name == "multi_step_automation":
-                    result = await self._handle_multi_step_automation(arguments)
-                elif name == "ssh_connect_with_auth":
-                    result = await self._handle_ssh_connect(arguments)
-                elif name == "database_connect_interactive":
-                    result = await self._handle_database_connect(arguments)
-                elif name == "gdb_debug_session":
-                    result = await self._handle_gdb_debug(arguments)
-                elif name == "analyze_crash":
-                    result = await self._handle_analyze_crash(arguments)
-                elif name == "python_debug_session":
-                    result = await self._handle_python_debug(arguments)
-                elif name == "send_input":
-                    result = await self._handle_send_input(arguments)
-                elif name == "get_session_output":
-                    result = await self._handle_get_session_output(arguments)
-                elif name == "send_signal":
-                    result = await self._handle_send_signal(arguments)
-                elif name == "clear_session_buffer":
-                    result = await self._handle_clear_session_buffer(arguments)
-                elif name == "execute_ssh_commands":
-                    result = await self._handle_execute_ssh_commands(arguments)
-                elif name == "execute_sql":
-                    result = await self._handle_execute_sql(arguments)
+                # Route to appropriate handler using dispatch table
+                handler = self._tool_handlers.get(name)
+                if handler:
+                    result = await handler(arguments)
                 else:
                     result = {"error": f"Unknown tool: {name}"}
                 
@@ -488,244 +336,85 @@ class InteractiveAutomationServer:
             "successful_steps": sum(1 for r in results if r["success"])
         }
     
-    async def _handle_ssh_connect(self, args: dict) -> dict:
-        """Handle ssh_connect_with_auth tool call"""
-        host = args["host"]
-        username = args["username"]
-        auth_method = args["auth_method"]
-        port = args.get("port", 22)
-        post_connect_commands = args.get("post_connect_commands", [])
+    async def _handle_execute_command(self, args: dict) -> dict:
+        """Handle execute_command tool call - truly universal for any command"""
+        command = args["command"]
+        command_args = args.get("command_args", [])
+        automation_patterns = args.get("automation_patterns", args.get("auth_patterns", []))  # Support both names for backward compatibility
+        execution_timeout = args.get("execution_timeout", args.get("connection_timeout", 30))  # Support both names
+        follow_up_commands = args.get("follow_up_commands", args.get("post_connect_commands", []))  # Support both names
+        environment = args.get("environment", {})
+        working_directory = args.get("working_directory")
         
-        if auth_method == "password":
-            password = args.get("password")
-            if not password:
-                return {"success": False, "error": "Password required for password authentication"}
-            
-            result = await self.ssh_automation.connect_with_password(
-                host=host,
-                username=username,
-                password=password,
-                port=port,
-                post_connect_commands=post_connect_commands
-            )
+        # Build the full command
+        full_command = command
+        if command_args:
+            full_command += " " + " ".join(command_args)
         
-        elif auth_method == "key":
-            key_path = args.get("key_path")
-            key_passphrase = args.get("key_passphrase")
-            
-            if not key_path:
-                return {"success": False, "error": "Key path required for key authentication"}
-            
-            result = await self.ssh_automation.connect_with_key(
-                host=host,
-                username=username,
-                key_path=key_path,
-                passphrase=key_passphrase,
-                port=port
-            )
-        
-        else:
-            return {"success": False, "error": f"Unknown auth method: {auth_method}"}
-        
-        return result
-    
-    async def _handle_database_connect(self, args: dict) -> dict:
-        """Handle database_connect_interactive tool call"""
-        db_type = args["db_type"]
-        host = args["host"]
-        username = args["username"]
-        password = args["password"]
-        port = args.get("port")
-        database = args.get("database")
-        initial_commands = args.get("initial_commands", [])
-        
-        if db_type == "mysql":
-            port = port or 3306
-            result = await self.db_automation.mysql_connect(
-                host=host,
-                username=username,
-                password=password,
-                database=database,
-                port=port
-            )
-        
-        elif db_type == "postgresql":
-            port = port or 5432
-            result = await self.db_automation.postgresql_connect(
-                host=host,
-                username=username,
-                password=password,
-                database=database,
-                port=port
-            )
-        
-        else:
-            return {"success": False, "error": f"Unsupported database type: {db_type}"}
-        
-        # Execute initial commands if connection succeeded
-        if result["success"] and initial_commands:
-            session_id = result["session_id"]
-            for command in initial_commands:
-                await self.db_automation.execute_sql(session_id, command)
-        
-        return result
-    
-    async def _handle_gdb_debug(self, args: dict) -> dict:
-        """Handle gdb_debug_session tool call"""
-        program = args["program"]
-        core_file = args.get("core_file")
-        args_list = args.get("args", [])
-        breakpoints = args.get("breakpoints", [])
-        
-        result = await self.debug_automation.gdb_debug_session(
-            program=program,
-            core_file=core_file,
-            args=args_list
+        # Create the session
+        session_id = await self.session_manager.create_session(
+            command=full_command,
+            timeout=execution_timeout,
+            environment=environment,
+            working_directory=working_directory
         )
         
-        # Set breakpoints if session was created successfully
-        if result["success"] and breakpoints:
-            session_id = result["session_id"]
-            session = await self.session_manager.get_session(session_id)
-            for bp in breakpoints:
-                await session.send_input(f"break {bp}")
-                await session.expect_and_respond(r"\(gdb\)", "", timeout=10)
+        # Handle automation patterns if provided
+        if automation_patterns:
+            try:
+                # Convert auth patterns to automation engine format
+                automation_steps = []
+                for pattern_config in automation_patterns:
+                    automation_steps.append({
+                        "pattern": pattern_config["pattern"],
+                        "response": pattern_config["response"],
+                        "timeout": execution_timeout
+                    })
+                
+                # Execute authentication automation
+                auth_result = await self.automation_engine.multi_step_automation(
+                    session_id=session_id,
+                    steps=automation_steps,
+                    stop_on_failure=True
+                )
+                
+                if not auth_result["success"]:
+                    await self.session_manager.destroy_session(session_id)
+                    return {
+                        "success": False,
+                        "error": f"Authentication failed: {auth_result.get('error', 'Unknown error')}"
+                    }
+                    
+            except Exception as e:
+                await self.session_manager.destroy_session(session_id)
+                return {
+                    "success": False,
+                    "error": f"Authentication error: {str(e)}"
+                }
         
-        return result
-    
-    async def _handle_analyze_crash(self, args: dict) -> dict:
-        """Handle analyze_crash tool call"""
-        session_id = args["session_id"]
-        analysis_depth = args.get("analysis_depth", "comprehensive")
+        # Execute follow-up commands if provided
+        if follow_up_commands:
+            try:
+                session = await self.session_manager.get_session(session_id)
+                if session:
+                    for cmd in follow_up_commands:
+                        await session.send_input(cmd)
+                        # Give time for command execution
+                        await asyncio.sleep(0.5)
+            except Exception as e:
+                # Don't fail the execution if follow-up commands fail
+                pass
         
-        result = await self.debug_automation.analyze_crash(session_id)
-        
-        return result
-    
-    async def _handle_python_debug(self, args: dict) -> dict:
-        """Handle python_debug_session tool call"""
-        script = args["script"]
-        breakpoints = args.get("breakpoints", [])
-        
-        result = await self.debug_automation.python_debug_session(
-            script=script,
-            breakpoints=breakpoints
-        )
-        
-        return result
-    
-    async def _handle_send_input(self, args: dict) -> dict:
-        """Handle send_input tool call"""
-        session_id = args["session_id"]
-        input_text = args["input_text"]
-        add_newline = args.get("add_newline", True)
-        
-        session = await self.session_manager.get_session(session_id)
-        if not session:
-            return {"success": False, "error": "Session not found"}
-        
-        try:
-            await session.send_input(input_text, add_newline)
-            return {
-                "success": True,
-                "session_id": session_id,
-                "input_sent": input_text
-            }
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
-    async def _handle_get_session_output(self, args: dict) -> dict:
-        """Handle get_session_output tool call"""
-        session_id = args["session_id"]
-        lines = args.get("lines")
-        
-        session = await self.session_manager.get_session(session_id)
-        if not session:
-            return {"success": False, "error": "Session not found"}
-        
-        try:
-            output = await session.get_output(lines)
-            return {
-                "success": True,
-                "session_id": session_id,
-                "output": output,
-                "lines_retrieved": lines
-            }
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
-    async def _handle_send_signal(self, args: dict) -> dict:
-        """Handle send_signal tool call"""
-        session_id = args["session_id"]
-        signal = args["signal"]
-        
-        session = await self.session_manager.get_session(session_id)
-        if not session:
-            return {"success": False, "error": "Session not found"}
-        
-        try:
-            await session.send_signal(signal)
-            return {
-                "success": True,
-                "session_id": session_id,
-                "signal_sent": signal
-            }
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
-    async def _handle_clear_session_buffer(self, args: dict) -> dict:
-        """Handle clear_session_buffer tool call"""
-        session_id = args["session_id"]
-        
-        session = await self.session_manager.get_session(session_id)
-        if not session:
-            return {"success": False, "error": "Session not found"}
-        
-        try:
-            await session.clear_output_buffer()
-            return {
-                "success": True,
-                "session_id": session_id,
-                "message": "Buffer cleared"
-            }
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
-    async def _handle_execute_ssh_commands(self, args: dict) -> dict:
-        """Handle execute_ssh_commands tool call"""
-        session_id = args["session_id"]
-        commands = args["commands"]
-        timeout = args.get("timeout", 30)
-        
-        try:
-            results = await self.ssh_automation.execute_commands(
-                session_id=session_id,
-                commands=commands,
-                timeout=timeout
-            )
-            return {
-                "success": True,
-                "session_id": session_id,
-                "command_results": results
-            }
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
-    async def _handle_execute_sql(self, args: dict) -> dict:
-        """Handle execute_sql tool call"""
-        session_id = args["session_id"]
-        query = args["query"]
-        timeout = args.get("timeout", 60)
-        
-        try:
-            result = await self.db_automation.execute_sql(
-                session_id=session_id,
-                sql_query=query,
-                timeout=timeout
-            )
-            return result
-        except Exception as e:
-            return {"success": False, "error": str(e)}
+        return {
+            "success": True,
+            "session_id": session_id,
+            "command": full_command,
+            "executed": True,
+            "automation_patterns_used": len(automation_patterns),
+            "follow_up_commands_executed": len(follow_up_commands)
+        }
+
+
     
     def _format_result(self, result: dict) -> str:
         """Format result for display"""
@@ -753,5 +442,9 @@ async def main():
     server = InteractiveAutomationServer()
     await server.run()
 
-if __name__ == "__main__":
+def main_sync():
+    """Synchronous entry point for console scripts"""
     asyncio.run(main())
+
+if __name__ == "__main__":
+    main_sync()

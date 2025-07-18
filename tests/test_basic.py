@@ -91,54 +91,24 @@ def test_automation_engine():
     session_manager = SessionManager()
     automation_engine = AutomationEngine(session_manager)
     
-    # Test predefined patterns
-    patterns = automation_engine.predefined_patterns
-    if "ssh_password_auth" in patterns:
-        print("✓ SSH password auth pattern loaded")
-    else:
-        print("✗ SSH password auth pattern not found")
-    
-    if "mysql_connect" in patterns:
-        print("✓ MySQL connect pattern loaded")
-    else:
-        print("✗ MySQL connect pattern not found")
-    
-    if "gdb_debugging" in patterns:
-        print("✓ GDB debugging pattern loaded")
-    else:
-        print("✗ GDB debugging pattern not found")
+    # Universal design: No predefined patterns - all patterns are user-provided
+    print("✓ Universal design: Patterns are provided by users, not hardcoded")
 
 def test_imports():
     """Test that all modules can be imported"""
     print("\nTesting module imports...")
     
     try:
-        from interactive_automation_mcp.main import InteractiveAutomationServer
+        # Import from root main.py since we unified the files
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+        from main import InteractiveAutomationServer
         print("✓ Main server class imported successfully")
     except ImportError as e:
         print(f"✗ Failed to import main server: {e}")
         return False
     
-    try:
-        from interactive_automation_mcp.ssh_automation import SSHAutomation
-        print("✓ SSH automation imported successfully")
-    except ImportError as e:
-        print(f"✗ Failed to import SSH automation: {e}")
-        return False
-    
-    try:
-        from interactive_automation_mcp.database_automation import DatabaseAutomation
-        print("✓ Database automation imported successfully")
-    except ImportError as e:
-        print(f"✗ Failed to import database automation: {e}")
-        return False
-    
-    try:
-        from interactive_automation_mcp.debugging_automation import DebuggingAutomation
-        print("✓ Debugging automation imported successfully")
-    except ImportError as e:
-        print(f"✗ Failed to import debugging automation: {e}")
-        return False
+    # Universal design: No program-specific automation classes
+    print("✓ Universal design: No hardcoded automation classes needed")
     
     return True
 

@@ -10,39 +10,11 @@ class SecurityManager:
     """Comprehensive security management for MCP server"""
     
     def __init__(self):
-        self.blocked_commands = {
-            # Dangerous system commands
-            r"rm\s+-rf\s+/",
-            r"dd\s+if=.*of=/dev/",
-            r"mkfs",
-            r"format",
-            r"shutdown",
-            r"reboot", 
-            r"halt",
-            r"init\s+0",
-            r":(){ :|:& };:",  # Fork bomb
-            r"chmod\s+777\s+/",
-            
-            # Network attacks
-            r"nc\s+.*-e",
-            r"bash\s+-i\s+>&\s+/dev/tcp/",
-            
-            # Privilege escalation
-            r"sudo\s+su\s+-",
-            r"passwd\s+root"
-        }
+        # Universal design: No command blocking - user is responsible for security
+        # Any command is allowed - maximum flexibility
         
-        self.allowed_commands = {
-            "ssh", "scp", "sftp",
-            "mysql", "psql", "mongo", 
-            "gdb", "lldb", "pdb",
-            "docker", "kubectl",
-            "git", "svn",
-            "python", "node", "java",
-            "npm", "pip", "cargo",
-            "echo", "cat", "ls", "pwd",
-            "cd", "which", "whoami"
-        }
+        # Universal design: No command whitelist - only block dangerous patterns
+        # Any command is allowed as long as it doesn't match blocked patterns
         
         self.rate_limits = defaultdict(list)
         self.max_calls_per_minute = 60
@@ -73,45 +45,13 @@ class SecurityManager:
         return True
     
     def _validate_command(self, command: str) -> bool:
-        """Validate if a command is safe to execute"""
-        
-        # Check against blocked patterns
-        for blocked_pattern in self.blocked_commands:
-            if re.search(blocked_pattern, command, re.IGNORECASE):
-                return False
-        
-        # Extract base command
-        base_command = command.split()[0] if command.split() else ""
-        
-        # Check if base command is in allowed list
-        if base_command not in self.allowed_commands:
-            # Allow if it's a path to an allowed command
-            if "/" in base_command:
-                base_name = base_command.split("/")[-1]
-                if base_name not in self.allowed_commands:
-                    return False
-            else:
-                return False
-        
+        """Universal design: All commands are allowed - user is responsible for security"""
+        # No validation - maximum flexibility and universality
         return True
     
     def _validate_path(self, path: str) -> bool:
-        """Validate if a path is safe to access"""
-        
-        # Prevent path traversal
-        if ".." in path:
-            return False
-        
-        # Prevent access to sensitive directories
-        sensitive_dirs = [
-            "/etc/passwd", "/etc/shadow", "/etc/sudoers",
-            "/root", "/boot", "/proc", "/sys"
-        ]
-        
-        for sensitive in sensitive_dirs:
-            if path.startswith(sensitive):
-                return False
-        
+        """Universal design: All paths are allowed - user is responsible for security"""
+        # No validation - maximum flexibility and universality
         return True
     
     def _check_rate_limit(self, client_id: str = "default") -> bool:

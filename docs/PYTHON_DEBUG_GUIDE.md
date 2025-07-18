@@ -4,30 +4,34 @@
 
 Yes, you can absolutely do Python debugging with this MCP server! The server includes comprehensive Python debugging capabilities through the Python Debugger (PDB) integration.
 
-## Available Python Debugging Tools
+## Universal Python Debugging Approach
 
-### 1. `python_debug_session`
-Starts a Python debugging session with PDB and intelligent automation.
+### 1. `execute_command` - The Universal Tool
+Use the universal `execute_command` tool to start any Python debugging command.
 
-**Parameters:**
-- `script` (required): Path to the Python script to debug
-- `breakpoints` (optional): List of breakpoints to set automatically
+**Examples:**
+- `python -m pdb script.py` - Start PDB debugger
+- `python -c "import pdb; pdb.run('exec(open("script.py").read())')"`
+- `python -m ipdb script.py` - If you have ipdb installed
+- Any custom Python debugging setup
 
 **Example usage:**
 ```json
 {
-  "tool": "python_debug_session",
+  "tool": "execute_command",
   "arguments": {
-    "script": "./my_script.py",
-    "breakpoints": ["main.py:15", "calculate_result", "my_script.py:42"]
+    "command": "python -m pdb script.py",
+    "automation_patterns": [
+      {"pattern": "\(Pdb\)", "response": "b main"}
+    ]
   }
 }
 ```
 
-### 2. `expect_and_respond` (for manual debugging)
-Can be used with Python debugging sessions for interactive debugging.
+### 2. `expect_and_respond` - Interactive Debugging
+Use for step-by-step debugging interactions.
 
-### 3. `multi_step_automation` (for automated debugging workflows)
+### 3. `multi_step_automation` - Automated Debugging Workflows
 Execute complex debugging sequences automatically.
 
 ## Python Debugging Capabilities
@@ -52,24 +56,24 @@ Execute complex debugging sequences automatically.
 
 ### Example 1: Basic Python Debugging
 ```
-"Debug my Python script example_debug.py and set breakpoints at the main function and line 25"
+"Use execute_command to start debugging my Python script example_debug.py with PDB"
 ```
 
 Claude will:
-1. Start a PDB session with your script
-2. Set breakpoints automatically
-3. Guide you through debugging process
+1. Use `execute_command` with `python -m pdb example_debug.py`
+2. Use `multi_step_automation` to set breakpoints
+3. Guide you through debugging with `expect_and_respond`
 4. Help analyze any errors or issues
 
 ### Example 2: Error Investigation
 ```
-"My Python script is crashing with a ZeroDivisionError. Help me debug it step by step."
+"Run my Python script with PDB to investigate a ZeroDivisionError"
 ```
 
 Claude will:
-1. Start debugging session
-2. Set strategic breakpoints
-3. Help you trace the error
+1. Use `execute_command` to start the debugging session
+2. Use automation patterns to set strategic breakpoints
+3. Help you trace the error interactively
 4. Suggest fixes for the issue
 
 ### Example 3: Performance Debugging

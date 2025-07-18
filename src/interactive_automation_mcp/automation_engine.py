@@ -24,7 +24,7 @@ class AutomationEngine:
     
     def __init__(self, session_manager: SessionManager):
         self.session_manager = session_manager
-        self.predefined_patterns = self._load_predefined_patterns()
+        # Universal design: No predefined patterns - all patterns are user-provided
     
     async def multi_step_automation(
         self,
@@ -155,72 +155,3 @@ class AutomationEngine:
                 "error": str(e)
             }
     
-    def _load_predefined_patterns(self) -> Dict[str, AutomationPattern]:
-        """Load predefined automation patterns"""
-        patterns = {}
-        
-        # SSH authentication patterns
-        patterns["ssh_password_auth"] = AutomationPattern(
-            name="ssh_password_auth",
-            description="Handle SSH password authentication",
-            patterns=[
-                {
-                    "expect": r"password:",
-                    "action": "respond_with_credential",
-                    "credential_key": "password"
-                },
-                {
-                    "expect": r"yes/no",
-                    "action": "respond",
-                    "response": "yes"
-                },
-                {
-                    "expect": r"Permission denied",
-                    "action": "terminate"
-                },
-                {
-                    "expect": r"[$#]",
-                    "action": "continue"
-                }
-            ]
-        )
-        
-        # Database connection patterns
-        patterns["mysql_connect"] = AutomationPattern(
-            name="mysql_connect",
-            description="Handle MySQL connection prompts",
-            patterns=[
-                {
-                    "expect": r"Enter password:",
-                    "action": "respond_with_credential",
-                    "credential_key": "password"
-                },
-                {
-                    "expect": r"mysql>",
-                    "action": "continue"
-                },
-                {
-                    "expect": r"Access denied",
-                    "action": "terminate"
-                }
-            ]
-        )
-        
-        # GDB debugging patterns
-        patterns["gdb_debugging"] = AutomationPattern(
-            name="gdb_debugging",
-            description="Standard GDB debugging workflow",
-            patterns=[
-                {
-                    "expect": r"\(gdb\)",
-                    "action": "continue"
-                },
-                {
-                    "expect": r"Program received signal",
-                    "action": "respond",
-                    "response": "bt"
-                }
-            ]
-        )
-        
-        return patterns

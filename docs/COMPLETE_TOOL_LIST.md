@@ -1,6 +1,6 @@
 # Complete MCP Tool List
 
-## All 7 Truly Universal Tools (Final Design - Maximum Flexibility)
+## All 6 Truly Universal Tools (Final Design - Maximum Flexibility)
 
 ### 📋 **Session Management (3 tools)**
 
@@ -29,94 +29,38 @@
    - Parameters: `session_id`, `steps[]`, `stop_on_failure`
    - Example: Login workflow with multiple prompts
 
-### 🔗 **Universal Connection Tool (1 tool)**
+### 🔗 **Universal Command Execution (1 tool)**
 
-6. **`connect_with_auth`** - **THE ULTIMATE GAME CHANGER**
-   - Connect to ANY interactive program with automated authentication
-   - Parameters: `program_type`, `host`, `username`, `password`, `auth_method`, `port`, `target`, `breakpoints`, `custom_command`
-   - **Supported Program Types:**
-     - **SSH**: `"ssh"` - SSH connections with password/key authentication
-     - **MySQL**: `"mysql"` - MySQL database connections
-     - **PostgreSQL**: `"postgresql"` - PostgreSQL database connections
-     - **MongoDB**: `"mongodb"` - MongoDB database connections
-     - **Redis**: `"redis"` - Redis database connections
-     - **FTP**: `"ftp"` - FTP file transfer connections
-     - **SFTP**: `"sftp"` - SFTP secure file transfer connections
-     - **Telnet**: `"telnet"` - Telnet connections
-     - **GDB**: `"gdb"` - GNU Debugger for C/C++/Rust
-     - **PDB**: `"pdb"` - Python Debugger
-     - **LLDB**: `"lldb"` - LLVM Debugger for C/C++/Swift
-     - **Node.js**: `"node"` - Node.js Inspector
-     - **PHP**: `"php"` - PHP Xdebug
-     - **Ruby**: `"ruby"` - Ruby Debugger
-     - **Java**: `"java"` - Java Debugger (JDB)
-     - **Custom**: `"custom"` - Any custom program with `custom_command`
-   - **Target Types:** `"program"`, `"script"`, `"core"`, `"process"`, `"attach"`
+6. **`execute_command`** - **THE ULTIMATE UNIVERSAL TOOL**
+   - Execute ANY command with optional automation - truly universal!
+   - Parameters: `command`, `command_args`, `automation_patterns`, `follow_up_commands`, `environment`
+   - **Supported Commands (literally ANY terminal command):**
+     - **`ssh user@host`** - SSH connections
+     - **`mysql -u root -p`** - MySQL database connections
+     - **`psql -h localhost -U user database`** - PostgreSQL connections
+     - **`mongosh mongodb://localhost/database`** - MongoDB connections
+     - **`redis-cli -h localhost -p 6379`** - Redis connections
+     - **`ftp ftp.example.com`** - FTP connections
+     - **`gdb program`** - GNU Debugger
+     - **`python -m pdb script.py`** - Python Debugger
+     - **`lldb program`** - LLVM Debugger
+     - **`node --inspect-brk app.js`** - Node.js Inspector
+     - **`docker exec -it container bash`** - Docker containers
+     - **`kubectl exec -it pod -- bash`** - Kubernetes pods
+     - **`telnet host port`** - Telnet connections
+     - **`nc host port`** - Netcat connections
+     - **`socat - TCP:host:port`** - Socket connections
+     - **`screen /dev/ttyACM0 9600`** - Serial connections
+     - **`minicom /dev/ttyUSB0`** - Serial communication
+     - **`tmux attach-session -t main`** - Tmux sessions
+     - **`your-custom-program --interactive`** - ANY interactive program!
+   - **Authentication**: Flexible `auth_patterns` array for any authentication flow
+   - **Arguments**: Optional `command_args` array for cleaner argument handling
+   - **Environment**: Custom environment variables
+   - **Working Directory**: Custom working directory
 
-### 🔍 **Universal Analysis Tool (1 tool)**
+**Note**: Analysis, debugging, and advanced session control are all handled through the universal `connect_with_auth` tool by running any command, and then using `expect_and_respond` or `multi_step_automation` to interact with the session.
 
-7. **`analyze_session`** - **THE ANALYSIS POWERHOUSE**
-   - Perform comprehensive analysis of any interactive session
-   - Parameters: `session_id`, `analysis_type`, `analysis_depth`, `custom_analysis`
-   - **Supported Analysis Types:**
-     - **Crash Analysis**: `"crash"` - Crash analysis (auto-detects debugger)
-     - **Performance Analysis**: `"performance"` - Performance profiling
-     - **Security Analysis**: `"security"` - Security vulnerability analysis
-     - **Debug Analysis**: `"debug"` - General debugging analysis
-     - **Log Analysis**: `"log"` - Log parsing and analysis
-     - **Custom Analysis**: `"custom"` - Custom analysis with custom commands
-
-### 🐛 **Debugging (2 tools)**
-
-9. **`analyze_crash`**
-   - Comprehensive crash analysis using GDB
-   - Parameters: `session_id`, `analysis_depth`
-   - Returns: stack traces, register states, analysis
-
-10. **`python_debug_session`**
-    - Start Python debugging with PDB
-    - Parameters: `script`, `breakpoints[]`
-    - Supports: automatic breakpoint setting
-
-### 🎮 **Session Control (6 tools)**
-
-11. **`send_input`**
-    - Send input to active sessions
-    - Parameters: `session_id`, `input_text`, `add_newline`
-    - Example: Send commands to running programs
-
-12. **`get_session_output`**
-    - Get output from session buffer
-    - Parameters: `session_id`, `lines`
-    - Returns: captured output from session
-
-13. **`send_signal`**
-    - Send signals to processes
-    - Parameters: `session_id`, `signal`
-    - Supports: SIGINT (Ctrl+C), SIGTERM, SIGKILL
-
-14. **`clear_session_buffer`**
-    - Clear session output buffer
-    - Parameters: `session_id`
-    - Useful for cleaning up output history
-
-15. **`execute_ssh_commands`**
-    - Execute commands on SSH sessions
-    - Parameters: `session_id`, `commands[]`, `timeout`
-    - Batch execute multiple commands
-
-16. **`execute_sql`**
-    - Execute SQL queries on DB sessions
-    - Parameters: `session_id`, `query`, `timeout`
-    - Returns: query results
-
-### 🎯 **Bonus Tool (1 tool)**
-
-17. **`python_debug_session`** (Enhanced)
-    - Full Python debugging capabilities
-    - Automatic breakpoint setting
-    - PDB integration
-    - Error analysis
 
 ## Usage Examples
 
