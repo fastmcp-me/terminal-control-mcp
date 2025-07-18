@@ -1,0 +1,2 @@
+[console_scripts]
+interactive-automation-mcp = interactive_automation_mcp.main:main_sync

@@ -1,0 +1,237 @@
+Metadata-Version: 2.4
+Name: interactive-automation-mcp
+Version: 1.0.0
+Summary: Interactive Automation MCP Server for Claude Code
+Author-email: Your Name <your.email@example.com>
+License: MIT
+Project-URL: Homepage, https://github.com/yourusername/interactive-automation-mcp
+Project-URL: Documentation, https://github.com/yourusername/interactive-automation-mcp/blob/main/README.md
+Project-URL: Repository, https://github.com/yourusername/interactive-automation-mcp
+Project-URL: Issues, https://github.com/yourusername/interactive-automation-mcp/issues
+Keywords: mcp,automation,interactive,claude,debugging,ssh,database
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: System :: Systems Administration
+Classifier: Topic :: Software Development :: Debuggers
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: mcp>=0.5.0
+Requires-Dist: pexpect>=4.8.0
+Requires-Dist: ptyprocess>=0.7.0
+Requires-Dist: paramiko>=2.9.0
+Requires-Dist: psycopg2-binary>=2.9.0
+Requires-Dist: pymongo>=4.0.0
+Requires-Dist: typing-extensions>=4.0.0
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: psutil>=5.9.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.21.0; extra == "dev"
+Requires-Dist: black>=22.0.0; extra == "dev"
+Requires-Dist: isort>=5.10.0; extra == "dev"
+Requires-Dist: mypy>=0.950; extra == "dev"
+Requires-Dist: ruff>=0.1.0; extra == "dev"
+
+# Interactive Automation MCP Server
+
+A comprehensive MCP (Model Context Protocol) server that enables Claude Code to perform expect/pexpect-style automation for interactive programs. This server provides intelligent automation for programs that require user interaction, such as SSH sessions, database connections, interactive installers, and debugging workflows.
+
+## ✨ Features
+
+- **🔄 Automated Interactive Sessions**: Handle complex multi-step interactions with terminal programs
+- **🎯 Pattern-Based Automation**: Wait for specific prompts and automatically respond
+- **📊 Session Management**: Maintain persistent interactive sessions across multiple operations
+- **🐛 Debugging Integration**: Enable LLM-powered debugging with GDB, PDB, LLDB
+- **🚀 High-Level Automation Patterns**: Pre-built workflows for SSH, databases, and common tools
+- **🔒 Security-First Design**: Comprehensive security controls and resource management
+- **🐍 Python Debugging**: Full PDB integration with automatic breakpoint setting
+
+## 🚀 Quick Start
+
+### Installation
+
+```bash
+# Create virtual environment
+uv venv
+source .venv/bin/activate
+
+# Install the package
+pip install .
+
+# Or install in development mode
+pip install -e ".[dev]"
+```
+
+### Configuration
+
+Add to your Claude Code configuration:
+
+```json
+{
+  "mcpServers": {
+    "interactive-automation": {
+      "command": "python",
+      "args": ["main.py"],
+      "cwd": "/path/to/interactive-automation-mcp"
+    }
+  }
+}
+```
+
+## 🛠️ Complete Tool Set (17 Tools)
+
+### 📋 Session Management (3 tools)
+- **`create_interactive_session`**: Create new interactive sessions
+- **`list_sessions`**: List all active sessions
+- **`destroy_session`**: Terminate and cleanup sessions
+
+### 🤖 Basic Automation (2 tools)
+- **`expect_and_respond`**: Wait for pattern and send response
+- **`multi_step_automation`**: Execute sequence of automation steps
+
+### 🔗 High-Level Automation (3 tools)
+- **`ssh_connect_with_auth`**: Connect to SSH with automated authentication
+- **`database_connect_interactive`**: Connect to databases with interactive auth
+- **`gdb_debug_session`**: Start GDB debugging with intelligent automation
+
+### 🐛 Debugging (2 tools)
+- **`analyze_crash`**: Perform comprehensive crash analysis
+- **`python_debug_session`**: Start Python debugging with PDB
+
+### 🎮 Session Control (6 tools)
+- **`send_input`**: Send input to active sessions
+- **`get_session_output`**: Get output from session buffers
+- **`send_signal`**: Send signals to processes (Ctrl+C, etc.)
+- **`clear_session_buffer`**: Clear session output buffers
+- **`execute_ssh_commands`**: Execute commands on SSH sessions
+- **`execute_sql`**: Execute SQL queries on database sessions
+
+### 🐍 Python Debugging (1 tool)
+- **`python_debug_session`**: Full PDB integration with breakpoint management
+
+## 💡 Usage Examples
+
+### 🔑 SSH Automation
+```bash
+# Natural language commands to Claude:
+"Connect to prod.example.com and check disk usage"
+"SSH to my server and restart the web service"
+"Run system diagnostics on the production server"
+```
+
+### 🗃️ Database Debugging
+```bash
+# Natural language commands to Claude:
+"Connect to my MySQL database and find slow queries"
+"Check database locks and running transactions"
+"Analyze table performance and suggest optimizations"
+```
+
+### 🐛 Python Debugging
+```bash
+# Natural language commands to Claude:
+"Debug my Python script with breakpoints at line 15 and main function"
+"My Python script is crashing, help me trace the error"
+"Step through my code and inspect variables"
+```
+
+### 🔧 Process Control
+```bash
+# Natural language commands to Claude:
+"Send Ctrl+C to interrupt the running process"
+"Get the output from my SSH session"
+"Execute these commands on my database connection"
+```
+
+### 🔄 Multi-Step Automation
+```bash
+# Natural language commands to Claude:
+"SSH to server, backup database, restart services, and verify everything is working"
+"Connect to database, run diagnostics, generate report, and email results"
+```
+
+## 🔒 Security
+
+This server operates with comprehensive security restrictions:
+- **Command filtering** to prevent dangerous operations (`rm -rf /`, `shutdown`, etc.)
+- **Path validation** to prevent directory traversal attacks
+- **Rate limiting** to prevent abuse (60 calls per minute)
+- **Session limits** to prevent resource exhaustion (50 concurrent sessions)
+- **Signal restrictions** to only allow safe signals
+- **Comprehensive logging** for audit trails
+
+## 📁 Project Structure
+
+```
+interactive-automation-mcp/
+├── main.py                     # Main entry point
+├── pyproject.toml              # Modern Python project configuration
+├── README.md                   # This file
+├── src/
+│   └── interactive_automation_mcp/
+│       ├── main.py            # Core MCP server
+│       ├── session_manager.py # Session lifecycle management
+│       ├── security.py        # Security controls
+│       └── ...                # Other modules
+├── tests/                      # Test suite
+├── docs/                       # Documentation
+└── examples/                   # Example scripts
+```
+
+## 🧪 Testing
+
+```bash
+# Run tests
+python tests/test_core.py
+python tests/test_basic.py
+
+# Install with development dependencies
+pip install -e ".[dev]"
+
+# Run with pytest
+pytest tests/
+```
+
+## 📚 Documentation
+
+- **[Installation Guide](docs/INSTALLATION.md)** - Detailed setup instructions
+- **[Python Debug Guide](docs/PYTHON_DEBUG_GUIDE.md)** - Python debugging tutorial
+- **[Complete Tool List](docs/COMPLETE_TOOL_LIST.md)** - All 17 available tools
+
+## 🚀 Development Status
+
+- ✅ **Production Ready** - All 17 tools implemented and tested
+- ✅ **Complete Security** - Comprehensive security controls
+- ✅ **Full Documentation** - Complete guides and examples
+- ✅ **Clean Architecture** - Well-organized, maintainable code
+- ✅ **Python Debugging** - Full PDB integration
+- ✅ **Modern Tooling** - pyproject.toml, uv, type hints
+
+## 📄 License
+
+MIT License - see LICENSE file for details
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes
+4. Add tests for new functionality
+5. Ensure all tests pass
+6. Commit your changes (`git commit -m 'Add amazing feature'`)
+7. Push to the branch (`git push origin feature/amazing-feature`)
+8. Open a Pull Request
+
+## 🙏 Acknowledgments
+
+- Built on the [Model Context Protocol (MCP)](https://github.com/anthropics/mcp) by Anthropic
+- Uses [pexpect](https://pexpect.readthedocs.io/) for terminal automation
+- Inspired by the need for intelligent interactive automation in AI workflows
