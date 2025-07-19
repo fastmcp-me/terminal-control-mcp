@@ -7,8 +7,7 @@ import asyncio
 import sys
 import os
 
-# Add the src directory to sys.path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src'))
+
 
 from interactive_automation_mcp.session_manager import SessionManager
 from interactive_automation_mcp.security import SecurityManager
@@ -100,16 +99,16 @@ def test_imports():
     
     try:
         # Import from package structure
-        from interactive_automation_mcp.main import InteractiveAutomationServer
+        from interactive_automation_mcp.main import mcp
         print("✓ Main server class imported successfully")
+        assert True  # Explicitly mark success
     except ImportError as e:
         print(f"✗ Failed to import main server: {e}")
-        return False
+        assert False, f"Failed to import main server: {e}"
     
     # Universal design: No program-specific automation classes
     print("✓ Universal design: No hardcoded automation classes needed")
-    
-    return True
+
 
 async def main():
     """Main test function"""

@@ -7,8 +7,7 @@ import asyncio
 import sys
 import os
 
-# Add the src directory to sys.path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src'))
+
 
 from interactive_automation_mcp.session_manager import SessionState, SessionMetadata
 from interactive_automation_mcp.security import SecurityManager
@@ -110,44 +109,48 @@ def test_tool_validation():
         else:
             print(f"✗ Valid tool call blocked: {tool_name}")
     
-    # Test invalid tool calls
-    invalid_calls = [
+    # Test universal design - all commands should be allowed (user responsible)
+    universal_commands = [
         ("create_interactive_session", {"command": "rm -rf /"}),
         ("create_interactive_session", {"command": "shutdown -h now"}),
         ("some_tool", {"path": "../../../etc/passwd"})
     ]
     
-    for tool_name, args in invalid_calls:
-        if not security_manager.validate_tool_call(tool_name, args):
-            print(f"✓ Invalid tool call blocked: {tool_name}")
+    for tool_name, args in universal_commands:
+        if security_manager.validate_tool_call(tool_name, args):
+            print(f"✓ Universal design: Command allowed (user responsible): {tool_name}")
         else:
-            print(f"✗ Invalid tool call allowed: {tool_name}")
+            print(f"✗ Universal design violated - command blocked: {tool_name}")
+
+
 
 def test_file_structure():
     """Test that all required files exist"""
     print("\nTesting file structure...")
     
+    # Paths are relative to the project root where the test is executed
     required_files = [
-        "main.py",
-        "session_manager.py",
-        "interactive_session.py",
-        "automation_engine.py",
-        "security.py",
-        "ssh_automation.py",
-        "database_automation.py",
-        "debugging_automation.py",
-        "requirements.txt",
-        "setup.py",
+        "pyproject.toml",
         "README.md",
-        "config.yaml",
-        "__init__.py"
+        "src/interactive_automation_mcp/__init__.py",
+        "src/interactive_automation_mcp/main.py",
+        "src/interactive_automation_mcp/session_manager.py",
+        "src/interactive_automation_mcp/interactive_session.py",
+        "src/interactive_automation_mcp/automation_engine.py",
+        "src/interactive_automation_mcp/security.py",
     ]
     
-    for file_name in required_files:
-        if os.path.exists(file_name):
-            print(f"✓ {file_name} exists")
+    all_found = True
+    for file_path in required_files:
+        if os.path.exists(file_path):
+            print(f"✓ {file_path} exists")
         else:
-            print(f"✗ {file_name} missing")
+            print(f"✗ {file_path} missing")
+            all_found = False
+    
+    if not all_found:
+        print(f"Hint: Test executed from '{os.getcwd()}'")
+
 
 def test_mcp_schema():
     """Test MCP tool schema structure"""

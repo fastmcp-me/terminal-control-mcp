@@ -1,9 +1,17 @@
 # Interactive Automation MCP Server
 
-A comprehensive MCP (Model Context Protocol) server that enables Claude Code to perform expect/pexpect-style automation for interactive programs. This server provides intelligent automation for programs that require user interaction, such as SSH sessions, database connections, interactive installers, and debugging workflows.
+A modern FastMCP-based server that enables Claude Code to perform expect/pexpect-style automation for interactive programs. Built with the latest MCP Python SDK 1.12.0, this server provides intelligent automation for programs that require user interaction, such as SSH sessions, database connections, interactive installers, and debugging workflows.
 
 ## ✨ Features
 
+### 🏗️ **Modern FastMCP Architecture**
+- **⚡ FastMCP Framework**: Built with MCP Python SDK 1.12.0 for optimal performance
+- **🔧 Decorator-Based Tools**: Clean `@mcp.tool()` decorators with automatic schema generation
+- **📝 Pydantic Models**: Type-safe input/output validation with structured data support
+- **🎯 Automatic Schema Generation**: JSON schemas generated from Python type hints
+- **🔄 Lifespan Management**: Proper startup/shutdown with resource cleanup
+
+### 🚀 **Core Automation Features**
 - **🔄 Automated Interactive Sessions**: Handle complex multi-step interactions with terminal programs
 - **🎯 Pattern-Based Automation**: Wait for specific prompts and automatically respond
 - **📊 Session Management**: Maintain persistent interactive sessions across multiple operations
@@ -11,6 +19,12 @@ A comprehensive MCP (Model Context Protocol) server that enables Claude Code to 
 - **🚀 Universal Command Execution**: Run ANY terminal command with optional automation
 - **🔒 User-Controlled Security**: Maximum flexibility with user responsibility
 - **🐍 Universal Programming Support**: Work with any programming language or tool
+
+### 💪 **Performance & Reliability**
+- **📦 Minimal Dependencies**: Only 4 essential dependencies (reduced from 9)
+- **⚡ Fast Installation**: Lightweight package with minimal footprint
+- **🛡️ Type Safety**: Full type coverage with mypy and Pydantic validation
+- **🧹 Clean Code**: Modern Python with black formatting and ruff linting
 
 ## 🚀 Quick Start
 
@@ -36,9 +50,27 @@ Once installed, configure the MCP server in your AI assistant:
 
 ### 🤖 Claude Code (Anthropic)
 
-1. **Add to your Claude Code configuration**:
-   - **Location**: `~/.config/claude-code/mcp_servers.json` (Linux/macOS) or `%APPDATA%\claude-code\mcp_servers.json` (Windows)
-   - **Configuration**:
+1. **Install the package first (required for console script)**:
+   ```bash
+   # Install the package to create the console script
+   pip install .
+   ```
+
+2. **Add the MCP server using Claude Code CLI**:
+   ```bash
+   # Recommended: User scope (available across all projects)
+   claude mcp add interactive-automation -s user interactive-automation-mcp
+
+   # Alternative: Local scope (default - current project only)
+   claude mcp add interactive-automation interactive-automation-mcp
+
+   # Alternative: Project scope (shared via .mcp.json in version control)
+   claude mcp add interactive-automation -s project interactive-automation-mcp
+   ```
+
+3. **Alternative: Manual configuration** (if needed):
+   - **Location**: Use `claude mcp add` command instead of manual configuration
+   - **Legacy method** (not recommended):
    ```json
    {
      "mcpServers": {
@@ -53,20 +85,10 @@ Once installed, configure the MCP server in your AI assistant:
    }
    ```
 
-2. **Alternative configuration using Python directly**:
-   ```json
-   {
-     "mcpServers": {
-       "interactive-automation": {
-         "command": "/path/to/interactive-automation-mcp/.venv/bin/python",
-         "args": ["-m", "interactive_automation_mcp.main"],
-         "cwd": "/path/to/interactive-automation-mcp"
-       }
-     }
-   }
+4. **Verify the server was added**:
+   ```bash
+   claude mcp list
    ```
-
-3. **Restart Claude Code** to load the new MCP server
 
 **Note**: The MCP server will be automatically launched by Claude Code when needed - no manual activation required.
 
@@ -135,7 +157,7 @@ For containerized environments, you can run the MCP server in a container:
    RUN pip install -e .
    
    # MCP servers use stdio, not HTTP
-   CMD ["python", "main.py"]
+   CMD ["interactive-automation-mcp"]
    ```
 
 2. **Configure MCP client to use containerized server**:
@@ -191,47 +213,188 @@ ls -la /path/to/.venv/bin/interactive-automation-mcp
 
 **Note**: Analysis, debugging, and advanced session control are all handled through the universal `execute_command` tool by running any command, and then using `expect_and_respond` or `multi_step_automation` to interact with the session.
 
+## 🧪 Trying Out the Server
+
+### Quick Start
+```bash
+# Install and activate
+pip install .
+claude mcp add interactive-automation -s user interactive-automation-mcp
+```
+
+### Session Management Tools
+
+#### Tool: `create_interactive_session`
+```bash
+# Ask Claude Code:
+"Use create_interactive_session tool with command 'echo hello world' and then use list_sessions tool"
+"Use create_interactive_session tool: python3 -c 'import code; code.interact()' to calculate 2+2"
+```
+
+#### Tool: `list_sessions`
+```bash
+# Ask Claude Code:
+"Use list_sessions tool to show all active sessions"
+```
+
+#### Tool: `destroy_session`
+```bash
+# Ask Claude Code:
+"Use destroy_session tool to terminate session [session_id]"
+```
+
+### Basic Automation Tools
+
+#### Tool: `expect_and_respond`
+```bash
+# Ask Claude Code:
+"Use expect_and_respond tool on session [session_id] to wait for 'Name:' pattern and respond 'Alice'"
+"Use expect_and_respond tool to wait for 'password:' prompt and respond with the password"
+```
+
+#### Tool: `multi_step_automation`
+```bash
+# Ask Claude Code:
+"Use multi_step_automation tool with steps: wait for 'login:', respond 'user', then wait for 'password:', respond 'pass'"
+```
+
+### Universal Command Execution Tool
+
+#### Tool: `execute_command`
+```bash
+# Ask Claude Code:
+"Use execute_command tool: 'top' with execution_timeout 5 seconds then destroy session"
+"Use execute_command tool: 'ssh localhost' with automation patterns for password prompts"
+"Use execute_command tool: 'docker exec -it mycontainer bash' with follow-up commands to list files"
+"Use execute_command tool: 'kubectl exec -it pod-name -- sh' with follow-up commands to check logs"
+```
+
+### Python Debugging Example
+
+Using the provided `examples/example_debug.py` - **Claude autonomously debugs using MCP tools**:
+
+```bash
+# To ensure Claude uses the MCP server tools, be explicit:
+
+"Use the interactive automation MCP server to debug examples/example_debug.py. 
+Start by using execute_command to launch 'python3 -m pdb examples/example_debug.py', 
+then use multi_step_automation to systematically debug and identify all bugs."
+
+# Alternative explicit prompts that guarantee MCP tool usage:
+"Create an interactive debugging session for examples/example_debug.py using create_interactive_session tool"
+"Execute 'python3 -m pdb examples/example_debug.py' with the execute_command tool and debug the issues"
+"Use multi_step_automation tool to run a complete debugging workflow on examples/example_debug.py"
+```
+
+**Ensuring MCP Tool Usage - Key Phrases:**
+- **"Use the interactive automation MCP server"** - Explicitly mentions the server
+- **"using [tool_name] tool"** - Names specific tools to use
+- **"Create an interactive session"** - Triggers `create_interactive_session` tool
+- **"Execute [command] with execute_command tool"** - Triggers `execute_command` tool  
+- **"Use multi_step_automation"** - Triggers `multi_step_automation` tool
+
+**Claude's autonomous debugging workflow with MCP tools:**
+1. **execute_command**: `'python3 -m pdb examples/example_debug.py'`
+2. **multi_step_automation** with steps:
+   - `expect: "(Pdb)", respond: "c"` - Run to see where it crashes
+   - `expect: "IndexError", respond: "l"` - List code around the error
+   - `expect: "(Pdb)", respond: "b buggy_function"` - Set strategic breakpoint
+   - `expect: "(Pdb)", respond: "r"` - Restart program
+   - `expect: "(Pdb)", respond: "c"` - Continue to breakpoint
+   - `expect: "(Pdb)", respond: "p data"` - Inspect the data array
+   - `expect: "(Pdb)", respond: "p len(data)"` - Check array length
+   - `expect: "(Pdb)", respond: "p i"` - Inspect loop variable
+   - `expect: "(Pdb)", respond: "n"` - Step through the problematic loop
+3. **Analysis & Report**: Claude identifies the `range(len(data) + 1)` bug
+
+**What Claude discovers using the MCP tools:**
+- IndexError from accessing `data[5]` when array only has indices 0-4
+- Root cause: `range(len(data) + 1)` should be `range(len(data))`
+- Additional issues: division by zero, recursive inefficiency
+- Provides exact code fixes and explanations
+
+### Multi-Step Automation Examples
+
+```bash
+# Ask Claude Code:
+"Use execute_command tool: 'ssh server' with automation patterns for login, then use multi_step_automation: check disk usage, if >80% clean logs"
+"Use create_interactive_session tool: mysql -u root -p, then use multi_step_automation for health check queries"
+"Use execute_command tool: 'gdb crashed_program core' with multi_step_automation to analyze backtrace"
+```
+
+### Development Testing
+```bash
+# Run basic functionality tests
+python tests/test_core.py
+python tests/test_basic.py
+
+# Install with development dependencies
+pip install -e ".[dev]"
+
+# Run all tests
+pytest tests/
+```
+
 ## 💡 Usage Examples
 
-### 🔑 Universal Connection Examples
+### 🔑 Interactive Session Examples
 ```bash
-# Natural language commands to Claude:
-"Connect to prod.example.com via SSH and check disk usage"
-"Connect to my MySQL database and show tables"
-"Connect to my PostgreSQL server and analyze slow queries"
-"Connect to my Redis instance and check memory usage"
-"Connect to my MongoDB cluster and show collections"
-"Connect to my FTP server and list files"
-"Connect to my C++ program with GDB and set breakpoints"
-"Connect to my Python script with PDB for debugging"
-"Connect to my crashed program using GDB with core dump"
-"Connect to my Node.js application with inspector"
-"Connect to my Docker container and run commands"
-"Connect to my Kubernetes pod and debug issues"
-"Connect to my custom interactive application"
-"Connect to any program that accepts interactive input"
+# Natural language commands to Claude (keywords that trigger MCP tools):
+"Create interactive session: SSH to prod.example.com and check disk usage"
+"Execute command: mysql -u root -p and show tables"
+"Create session: gdb myprogram and set breakpoints"
+"Execute interactively: python -m pdb myscript.py"
+"Run with automation: ssh user@host (handle password prompts)"
+"Create interactive session: docker exec -it container bash"
+"Execute command: kubectl exec -it pod sh and list files"
+"Start session: redis-cli and check memory usage"
+"Create session with automation patterns for password prompts"
+"Execute command with follow-up commands after connection"
 ```
 
 ### 🚀 Truly Universal Examples
 ```bash
 # ANY command that runs in a terminal:
-"Connect using command: ssh user@host"
-"Connect using command: docker exec -it myapp bash"
-"Connect using command: kubectl exec -it pod-name -- sh"
-"Connect using command: nc -l 8080"
-"Connect using command: socat - TCP:localhost:3000"
-"Connect using command: python3 -c 'import code; code.interact()'"
-"Connect using command: ./my-custom-repl --debug"
-"Connect using command: minicom /dev/ttyUSB0"
-"Connect using command: screen /dev/ttyACM0 9600"
-"Connect using command: tmux attach-session -t main"
+"Run interactive session: ssh user@host"
+"Execute interactively: docker exec -it myapp bash"
+"Start session: kubectl exec -it pod-name -- sh"
+"Launch: nc -l 8080"
+"Run: socat - TCP:localhost:3000"
+"Start interactive Python: python3 -c 'import code; code.interact()'"
+"Launch my custom REPL: ./my-custom-repl --debug"
+"Open serial connection: minicom /dev/ttyUSB0"
+"Start screen session: screen /dev/ttyACM0 9600"
+"Attach to tmux: tmux attach-session -t main"
+```
+
+### 🐍 Python Debugging Examples
+```bash
+# Natural language commands to Claude:
+"Start a PDB debugging session with my Python script bug_script.py"
+"Debug my Flask app: set breakpoints, inspect variables, and trace execution"
+"Connect to a running Python process with PDB and debug live issues"
+"Analyze a Python crash: load core dump, examine stack trace, identify root cause"
+
+# Benefits: Interactive debugging with full context, real-time variable inspection,
+# step-through execution, and automated breakpoint management
+```
+
+### 🤖 Claude Code Integration Examples  
+```bash
+# Natural language commands to Claude:
+"Launch another Claude Code instance in this directory and ask it to analyze my logs"
+"Start a new Claude Code session in my backend folder and have it run tests"
+"Open Claude Code in my frontend directory and coordinate with it on API changes"
+"Create a Claude Code instance for each microservice and manage them simultaneously"
+
+# Benefits: Parallel development workflows, specialized AI assistants per project,
+# coordinated multi-repository work, and distributed task execution
 ```
 
 ### 🔍 Universal Analysis Examples
 ```bash
 # Natural language commands to Claude:
 "Connect to my crashed program with GDB and analyze the crash"
-"Connect to my Python script with PDB and set breakpoints"
 "Connect to my performance monitoring tool and gather metrics"
 "Connect to my log analysis tool and find error patterns"
 "Connect to any program and then send commands to analyze it"
@@ -292,34 +455,16 @@ interactive-automation-mcp/
 └── examples/                   # Example scripts
 ```
 
-## 🧪 Testing
-
-```bash
-# Run tests
-python tests/test_core.py
-python tests/test_basic.py
-
-# Install with development dependencies
-pip install -e ".[dev]"
-
-# Run with pytest
-pytest tests/
-```
-
-## 📚 Documentation
-
-- **[Installation Guide](docs/INSTALLATION.md)** - Detailed setup instructions
-- **[Python Debug Guide](docs/PYTHON_DEBUG_GUIDE.md)** - Python debugging tutorial
-- **[Complete Tool List](docs/COMPLETE_TOOL_LIST.md)** - All 6 universal tools
-
 ## 🚀 Development Status
 
 - ✅ **Production Ready** - All 6 universal tools implemented and tested
+- ✅ **FastMCP Architecture** - Modern MCP Python SDK 1.12.0 implementation
+- ✅ **Type Safety** - Full Pydantic model validation and type coverage
+- ✅ **Minimal Dependencies** - Only 4 essential dependencies (reduced from 9)
 - ✅ **Complete Security** - Comprehensive security controls
-- ✅ **Full Documentation** - Complete guides and examples
 - ✅ **Clean Architecture** - Well-organized, maintainable code
 - ✅ **Python Debugging** - Full PDB integration
-- ✅ **Modern Tooling** - pyproject.toml, uv, type hints
+- ✅ **Modern Tooling** - pyproject.toml, uv, black, ruff, mypy
 
 ## 📄 License
 

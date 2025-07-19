@@ -22,6 +22,17 @@ def divide_numbers(a, b):
     # This might cause a division by zero error
     return a / b
 
+def buggy_function():
+    """A function with a deliberate bug for debugging demonstration"""
+    data = [1, 2, 3, 4, 5]
+    result = 0
+    
+    # Bug: index will go out of bounds
+    for i in range(len(data) + 1):  # This +1 causes the bug
+        result += data[i]  # Will fail on the last iteration
+    
+    return result
+
 def main():
     print("Starting calculations...")
     
@@ -43,6 +54,14 @@ def main():
         print(f"Error result: {error_result}")
     except ZeroDivisionError as e:
         print(f"Error caught: {e}")
+    
+    # Test buggy function for debugging demonstration
+    print("Testing buggy function...")
+    try:
+        buggy_result = buggy_function()
+        print(f"Buggy function result: {buggy_result}")
+    except IndexError as e:
+        print(f"Bug found: {e}")
     
     print("Calculations completed!")
 
