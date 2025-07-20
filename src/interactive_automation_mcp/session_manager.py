@@ -2,7 +2,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from .interactive_session import InteractiveSession
@@ -24,15 +24,15 @@ class SessionMetadata:
     last_activity: float
     state: SessionState
     timeout: int
-    user_data: Dict[str, Any] = field(default_factory=dict)
+    user_data: dict[str, Any] = field(default_factory=dict)
 
 
 class SessionManager:
     """Manages interactive terminal sessions with lifecycle tracking"""
 
     def __init__(self, max_sessions: int = 50, default_timeout: int = 3600):
-        self.sessions: Dict[str, InteractiveSession] = {}
-        self.session_metadata: Dict[str, SessionMetadata] = {}
+        self.sessions: dict[str, InteractiveSession] = {}
+        self.session_metadata: dict[str, SessionMetadata] = {}
         self.max_sessions = max_sessions
         self.default_timeout = default_timeout
         self._cleanup_task = None
@@ -40,9 +40,9 @@ class SessionManager:
     async def create_session(
         self,
         command: str,
-        timeout: Optional[int] = None,
-        environment: Optional[Dict[str, str]] = None,
-        working_directory: Optional[str] = None,
+        timeout: int | None = None,
+        environment: dict[str, str] | None = None,
+        working_directory: str | None = None,
     ) -> str:
         """Create a new interactive session"""
 
@@ -103,11 +103,11 @@ class SessionManager:
             return True
         return False
 
-    async def list_sessions(self) -> List[SessionMetadata]:
+    async def list_sessions(self) -> list[SessionMetadata]:
         """List all active sessions"""
         return list(self.session_metadata.values())
 
-    async def _cleanup_expired_sessions(self):
+    async def _cleanup_expired_sessions(self) -> None:
         """Remove expired sessions"""
         current_time = time.time()
         expired_sessions = []

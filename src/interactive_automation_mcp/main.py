@@ -10,15 +10,24 @@ import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
-from pydantic import BaseModel, Field
 
 from .automation_engine import AutomationEngine
+from .models import (
+    CreateSessionRequest,
+    CreateSessionResponse,
+    DestroySessionRequest,
+    DestroySessionResponse,
+    ExecuteCommandRequest,
+    ExecuteCommandResponse,
+    ExpectAndRespondRequest,
+    ListSessionsResponse,
+    MultiStepAutomationRequest,
+    SessionInfo,
+)
 from .security import SecurityManager
-
-# Import our components
 from .session_manager import SessionManager
 
 # Configure logging
@@ -30,136 +39,7 @@ logging.basicConfig(
 logger = logging.getLogger("interactive-automation-mcp")
 
 
-# Data Models for Tool Inputs/Outputs
-class CreateSessionRequest(BaseModel):
-    """Request to create a new interactive session"""
-
-    command: str = Field(
-        description="Command to execute (e.g., 'ssh user@host', 'mysql -u root -p')"
-    )
-    session_name: Optional[str] = Field(
-        None, description="Optional human-readable name for the session"
-    )
-    timeout: int = Field(3600, description="Session timeout in seconds")
-    environment: Optional[Dict[str, str]] = Field(
-        None, description="Environment variables to set"
-    )
-    working_directory: Optional[str] = Field(
-        None, description="Working directory for the command"
-    )
-
-
-class CreateSessionResponse(BaseModel):
-    """Response from creating a session"""
-
-    success: bool
-    session_id: str
-    command: str
-    timeout: int
-
-
-class SessionInfo(BaseModel):
-    """Information about a session"""
-
-    session_id: str
-    command: str
-    state: str
-    created_at: float
-    last_activity: float
-
-
-class ListSessionsResponse(BaseModel):
-    """Response from listing sessions"""
-
-    success: bool
-    sessions: List[SessionInfo]
-    total_sessions: int
-
-
-class DestroySessionRequest(BaseModel):
-    """Request to destroy a session"""
-
-    session_id: str = Field(description="ID of the session to destroy")
-
-
-class DestroySessionResponse(BaseModel):
-    """Response from destroying a session"""
-
-    success: bool
-    session_id: str
-    message: str
-
-
-class ExpectAndRespondRequest(BaseModel):
-    """Request for expect and respond operation"""
-
-    session_id: str
-    expect_pattern: str
-    response: str
-    timeout: int = Field(30, description="Timeout in seconds")
-    case_sensitive: bool = Field(
-        False, description="Whether pattern matching is case sensitive"
-    )
-
-
-class AutomationStep(BaseModel):
-    """A single automation step"""
-
-    name: Optional[str] = None
-    expect: str = Field(description="Pattern to expect")
-    respond: str = Field(description="Response to send")
-    timeout: int = Field(30, description="Timeout for this step")
-    optional: bool = Field(False, description="Whether this step is optional")
-
-
-class MultiStepAutomationRequest(BaseModel):
-    """Request for multi-step automation"""
-
-    session_id: str
-    steps: List[AutomationStep]
-    stop_on_failure: bool = Field(True, description="Whether to stop on first failure")
-
-
-class AutomationPattern(BaseModel):
-    """Automation pattern for command execution"""
-
-    pattern: str = Field(description="Regex pattern to match")
-    response: str = Field(description="Response to send when pattern matches")
-    secret: bool = Field(False, description="Whether response contains sensitive data")
-
-
-class ExecuteCommandRequest(BaseModel):
-    """Request to execute a command with optional automation"""
-
-    command: str = Field(description="Command to execute")
-    command_args: Optional[List[str]] = Field(
-        None, description="Additional command arguments"
-    )
-    automation_patterns: Optional[List[AutomationPattern]] = Field(
-        None, description="Optional automation patterns to handle prompts"
-    )
-    execution_timeout: int = Field(
-        30, description="Timeout in seconds for command execution"
-    )
-    follow_up_commands: Optional[List[str]] = Field(
-        None, description="Commands to execute after successful execution"
-    )
-    environment: Optional[Dict[str, str]] = Field(
-        None, description="Environment variables"
-    )
-    working_directory: Optional[str] = Field(None, description="Working directory")
-
-
-class ExecuteCommandResponse(BaseModel):
-    """Response from command execution"""
-
-    success: bool
-    session_id: str
-    command: str
-    executed: bool
-    automation_patterns_used: int
-    follow_up_commands_executed: int
-    error: Optional[str] = None
+# Application context and lifecycle management
 
 
 @dataclass
@@ -204,7 +84,17 @@ mcp = FastMCP("Interactive Automation", lifespan=app_lifespan)
 async def create_interactive_session(
     request: CreateSessionRequest, ctx: Context
 ) -> CreateSessionResponse:
-    """Create a new interactive session for program automation"""
+    """Create a new interactive session for program automation
+
+    Use this tool to start any interactive program that requires user input:
+    - Python debugger: 'python -u -m pdb script.py'
+    - SSH sessions: 'ssh user@host'
+    - Database clients: 'mysql -u root -p', 'psql -h localhost -U user'
+    - Interactive installers, configuration tools, or any CLI program
+
+    Returns a session_id that you'll use with other automation tools.
+    Sessions automatically timeout after the specified duration.
+    """
     logger.info(f"Creating session with command: {request.command}")
 
     app_ctx = ctx.request_context.lifespan_context
@@ -232,7 +122,16 @@ async def create_interactive_session(
 
 @mcp.tool()
 async def list_sessions(ctx: Context) -> ListSessionsResponse:
-    """List all active interactive sessions"""
+    """List all active interactive sessions
+
+    Use this tool to:
+    - Check which sessions are currently running
+    - Get session IDs for use with other tools
+    - Monitor session states (ACTIVE, WAITING, ERROR, etc.)
+    - See session creation times and last activity
+
+    Essential for managing multiple concurrent automation workflows.
+    """
     app_ctx = ctx.request_context.lifespan_context
 
     sessions = await app_ctx.session_manager.list_sessions()
@@ -257,7 +156,16 @@ async def list_sessions(ctx: Context) -> ListSessionsResponse:
 async def destroy_session(
     request: DestroySessionRequest, ctx: Context
 ) -> DestroySessionResponse:
-    """Terminate and cleanup an interactive session"""
+    """Terminate and cleanup an interactive session
+
+    Use this tool to:
+    - Clean up finished debugging or automation sessions
+    - Force-close unresponsive or stuck sessions
+    - Free up session slots (max 50 concurrent sessions)
+    - Properly cleanup resources and background processes
+
+    Always destroy sessions when automation is complete.
+    """
     app_ctx = ctx.request_context.lifespan_context
 
     success = await app_ctx.session_manager.destroy_session(request.session_id)
@@ -273,8 +181,21 @@ async def destroy_session(
 @mcp.tool()
 async def expect_and_respond(
     request: ExpectAndRespondRequest, ctx: Context
-) -> Dict[str, Any]:
-    """Wait for a pattern in session output and automatically respond"""
+) -> dict[str, Any]:
+    """Wait for a pattern in session output and automatically respond
+
+    Use this tool for single-step automation when you need to:
+    - Wait for a specific prompt (e.g., 'Password:', '(Pdb)', '$ ')
+    - Send a response when the pattern appears
+    - Handle login prompts, debugger commands, or confirmation dialogs
+
+    Examples:
+    - Debugger: expect '(Pdb)' respond 'n' (next line)
+    - SSH: expect 'Password:' respond 'mypassword'
+    - Installer: expect 'Continue? [y/N]' respond 'y'
+
+    For multiple steps, use multi_step_automation instead.
+    """
     app_ctx = ctx.request_context.lifespan_context
 
     session = await app_ctx.session_manager.get_session(request.session_id)
@@ -288,14 +209,27 @@ async def expect_and_respond(
         case_sensitive=request.case_sensitive,
     )
 
-    return result
+    return result  # type: ignore
 
 
 @mcp.tool()
 async def multi_step_automation(
     request: MultiStepAutomationRequest, ctx: Context
-) -> Dict[str, Any]:
-    """Execute a sequence of expect/respond patterns"""
+) -> dict[str, Any]:
+    """Execute a sequence of expect/respond patterns
+
+    Use this tool for complex automation workflows requiring multiple steps:
+    - SSH login followed by command execution
+    - Database connection with authentication and queries
+    - Debugger sessions with multiple breakpoints and commands
+    - Software installation with multiple prompts
+
+    Each step waits for its pattern before sending its response.
+    Set 'optional: true' for steps that might not appear.
+    Set 'stop_on_failure: false' to continue even if some steps fail.
+
+    Perfect for scripting entire interactive workflows.
+    """
     app_ctx = ctx.request_context.lifespan_context
 
     # Convert Pydantic models to dict format expected by automation engine
@@ -320,7 +254,22 @@ async def multi_step_automation(
 async def execute_command(
     request: ExecuteCommandRequest, ctx: Context
 ) -> ExecuteCommandResponse:
-    """Execute any command with optional automation patterns"""
+    """Execute any command with optional automation patterns
+
+    Universal tool for running any command with intelligent automation:
+    - Automatically handle prompts with regex patterns
+    - Execute follow-up commands after success
+    - Set custom environment variables and working directory
+
+    Use cases:
+    - Run scripts that prompt for input (automated responses)
+    - Execute commands requiring authentication (password prompts)
+    - Chain multiple commands with automated intermediate steps
+    - Handle interactive installers or configuration tools
+
+    Combines session creation, automation, and cleanup in one tool.
+    For long-running debugging sessions, use create_interactive_session instead.
+    """
     app_ctx = ctx.request_context.lifespan_context
 
     # Security validation
@@ -413,12 +362,12 @@ async def execute_command(
         )
 
 
-def main():
+def main() -> None:
     """Entry point for the server"""
     mcp.run()
 
 
-def main_sync():
+def main_sync() -> None:
     """Synchronous entry point for console scripts"""
     main()
 

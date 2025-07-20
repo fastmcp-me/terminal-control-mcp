@@ -2,6 +2,7 @@ mcp>=1.0.0
 pexpect>=4.8.0
 ptyprocess>=0.7.0
 typing-extensions>=4.0.0
+pydantic>=2.11.7
 
 [dev]
 mcp[cli]>=1.0.0
@@ -11,3 +12,4 @@ black>=22.0.0
 isort>=5.10.0
 mypy>=0.950
 ruff>=0.1.0
+types-pexpect>=4.8.0

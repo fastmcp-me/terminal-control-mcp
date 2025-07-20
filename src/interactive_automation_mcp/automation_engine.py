@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any
 
 from .session_manager import SessionManager
 
@@ -11,8 +11,8 @@ class AutomationEngine:
         # Universal design: No predefined patterns - all patterns are user-provided
 
     async def multi_step_automation(
-        self, session_id: str, steps: List[Dict[str, Any]], stop_on_failure: bool = True
-    ) -> List[Dict[str, Any]]:
+        self, session_id: str, steps: list[dict[str, Any]], stop_on_failure: bool = True
+    ) -> list[dict[str, Any]]:
         """Execute a sequence of expect/respond steps"""
 
         session = await self.session_manager.get_session(session_id)

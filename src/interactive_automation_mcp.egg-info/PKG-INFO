@@ -13,20 +13,19 @@ Classifier: Development Status :: 4 - Beta
 Classifier: Intended Audience :: Developers
 Classifier: License :: OSI Approved :: MIT License
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.8
-Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Topic :: Software Development :: Libraries :: Python Modules
 Classifier: Topic :: System :: Systems Administration
 Classifier: Topic :: Software Development :: Debuggers
-Requires-Python: >=3.8
+Requires-Python: >=3.10
 Description-Content-Type: text/markdown
 Requires-Dist: mcp>=1.0.0
 Requires-Dist: pexpect>=4.8.0
 Requires-Dist: ptyprocess>=0.7.0
 Requires-Dist: typing-extensions>=4.0.0
+Requires-Dist: pydantic>=2.11.7
 Provides-Extra: dev
 Requires-Dist: mcp[cli]>=1.0.0; extra == "dev"
 Requires-Dist: pytest>=7.0.0; extra == "dev"
@@ -35,6 +34,7 @@ Requires-Dist: black>=22.0.0; extra == "dev"
 Requires-Dist: isort>=5.10.0; extra == "dev"
 Requires-Dist: mypy>=0.950; extra == "dev"
 Requires-Dist: ruff>=0.1.0; extra == "dev"
+Requires-Dist: types-pexpect>=4.8.0; extra == "dev"
 
 # Interactive Automation MCP Server
 

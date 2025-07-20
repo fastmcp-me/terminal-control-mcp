@@ -8,18 +8,18 @@ logger = logging.getLogger(__name__)
 class SecurityManager:
     """Comprehensive security management for MCP server"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         # Universal design: No command blocking - user is responsible for security
         # Any command is allowed - maximum flexibility
 
         # Universal design: No command whitelist - only block dangerous patterns
         # Any command is allowed as long as it doesn't match blocked patterns
 
-        self.rate_limits = defaultdict(list)
+        self.rate_limits: dict[str, list[float]] = defaultdict(list)
         self.max_calls_per_minute = 60
         self.max_sessions = 50
 
-    def validate_tool_call(self, tool_name: str, arguments: dict) -> bool:
+    def validate_tool_call(self, tool_name: str, arguments: dict[str, str]) -> bool:
         """Validate if a tool call is allowed"""
 
         # Rate limiting

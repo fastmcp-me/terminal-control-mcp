@@ -1,6 +1,6 @@
 import os
 import signal
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import pexpect
 
@@ -13,8 +13,8 @@ class InteractiveSession:
         session_id: str,
         command: str,
         timeout: int = 30,
-        environment: Optional[Dict[str, str]] = None,
-        working_directory: Optional[str] = None,
+        environment: dict[str, str] | None = None,
+        working_directory: str | None = None,
     ):
         self.session_id = session_id
         self.command = command
@@ -22,27 +22,27 @@ class InteractiveSession:
         self.environment = environment or {}
         self.working_directory = working_directory
 
-        self.process: Optional[pexpect.spawn] = None
-        self.output_buffer: List[str] = []
+        self.process: pexpect.spawn | None = None
+        self.output_buffer: list[str] = []
         self.is_active = False
-        self.exit_code: Optional[int] = None
+        self.exit_code: int | None = None
 
         # State tracking
-        self.last_command = None
-        self.command_history: List[str] = []
+        self.last_command: str | None = None
+        self.command_history: list[str] = []
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """Initialize the interactive session"""
         try:
             # Set up environment
-            env = os.environ.copy()
+            env = dict(os.environ)
             env.update(self.environment)
 
             # Spawn the process
             self.process = pexpect.spawn(
                 self.command,
                 timeout=self.timeout,
-                env=env,
+                env=env,  # type: ignore
                 cwd=self.working_directory,
                 encoding="utf-8",
                 codec_errors="replace",
@@ -61,11 +61,11 @@ class InteractiveSession:
 
     async def expect_and_respond(
         self,
-        pattern: Union[str, List[str]],
+        pattern: str | list[str],
         response: str,
-        timeout: Optional[int] = None,
+        timeout: int | None = None,
         case_sensitive: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Wait for pattern and send response"""
 
         if not self.is_active or not self.process:
@@ -79,7 +79,7 @@ class InteractiveSession:
                 patterns = pattern
 
             # Add EOF and TIMEOUT to patterns
-            patterns.extend([pexpect.EOF, pexpect.TIMEOUT])
+            patterns_with_special: list[Any] = patterns + [pexpect.EOF, pexpect.TIMEOUT]
 
             # Set timeout
             original_timeout = self.process.timeout
@@ -87,13 +87,13 @@ class InteractiveSession:
                 self.process.timeout = timeout
 
             # Wait for pattern
-            index = self.process.expect(patterns)
+            index = self.process.expect(patterns_with_special)
 
             # Restore timeout
             self.process.timeout = original_timeout
 
             # Process result
-            if index < len(patterns) - 2:  # Pattern matched
+            if index < len(patterns):  # Pattern matched
                 matched_pattern = patterns[index]
                 before_text = self.process.before or ""
                 after_text = self.process.after or ""
@@ -116,7 +116,7 @@ class InteractiveSession:
                     "response_sent": response,
                 }
 
-            elif index == len(patterns) - 2:  # EOF
+            elif index == len(patterns):  # EOF
                 self.is_active = False
                 self.exit_code = self.process.exitstatus
                 return {
@@ -136,7 +136,7 @@ class InteractiveSession:
         except Exception as e:
             return {"success": False, "reason": "error", "error": str(e)}
 
-    async def send_input(self, input_text: str, add_newline: bool = True):
+    async def send_input(self, input_text: str, add_newline: bool = True) -> None:
         """Send input to the session"""
         if not self.is_active or not self.process:
             raise RuntimeError("Session is not active")
@@ -149,35 +149,35 @@ class InteractiveSession:
         self.command_history.append(input_text)
         self.last_command = input_text
 
-    async def send_signal(self, sig: int):
+    async def send_signal(self, sig: int) -> None:
         """Send signal to the process"""
         if not self.is_active or not self.process:
             raise RuntimeError("Session is not active")
 
         self.process.kill(sig)
 
-    async def get_output(self, lines: Optional[int] = None) -> str:
+    async def get_output(self, lines: int | None = None) -> str:
         """Get output from the session buffer"""
         if lines is None:
             return "\n".join(self.output_buffer)
         else:
             return "\n".join(self.output_buffer[-lines:])
 
-    async def clear_output_buffer(self):
+    async def clear_output_buffer(self) -> None:
         """Clear the output buffer"""
         self.output_buffer.clear()
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         """Terminate the session"""
         if self.process and self.is_active:
             try:
                 # Try graceful termination first
                 self.process.terminate()
-                self.process.wait(timeout=5)
+                self.process.wait()
             except (pexpect.exceptions.TIMEOUT, OSError):
                 # Force kill if needed
                 self.process.kill(signal.SIGKILL)
             finally:
                 self.is_active = False
                 if hasattr(self.process, "logfile_read") and self.process.logfile_read:
-                    self.process.logfile_read.close()
+                    self.process.logfile_read.close()  # type: ignore
