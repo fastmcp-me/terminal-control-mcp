@@ -72,25 +72,37 @@ class InteractiveSession:
             raise RuntimeError("Session is not active")
 
         try:
-            # Prepare patterns
+            # Prepare patterns with case sensitivity handling
             if isinstance(pattern, str):
                 patterns = [pattern]
             else:
                 patterns = pattern
 
+            # Apply case insensitive matching if requested
+            if not case_sensitive:
+                # Use (?i) flag for case insensitive regex patterns
+                processed_patterns = []
+                for p in patterns:
+                    if not p.startswith("(?i)"):
+                        processed_patterns.append(f"(?i){p}")
+                    else:
+                        processed_patterns.append(p)
+                patterns = processed_patterns
+
             # Add EOF and TIMEOUT to patterns
             patterns_with_special: list[Any] = patterns + [pexpect.EOF, pexpect.TIMEOUT]
 
-            # Set timeout
+            # Set timeout with default fallback
             original_timeout = self.process.timeout
-            if timeout:
-                self.process.timeout = timeout
+            effective_timeout = timeout or 30  # Default to 30 seconds
+            self.process.timeout = effective_timeout
 
-            # Wait for pattern
-            index = self.process.expect(patterns_with_special)
-
-            # Restore timeout
-            self.process.timeout = original_timeout
+            try:
+                # Wait for pattern with retry logic
+                index = self.process.expect(patterns_with_special)
+            finally:
+                # Always restore original timeout
+                self.process.timeout = original_timeout
 
             # Process result
             if index < len(patterns):  # Pattern matched
@@ -101,7 +113,7 @@ class InteractiveSession:
                 # Store output
                 self.output_buffer.append(before_text)
 
-                # Send response
+                # Send response if provided
                 if response:
                     self.process.sendline(response)
                     self.command_history.append(response)
@@ -114,6 +126,7 @@ class InteractiveSession:
                     "before": before_text,
                     "after": after_text,
                     "response_sent": response,
+                    "timeout_used": effective_timeout,
                 }
 
             elif index == len(patterns):  # EOF
@@ -124,17 +137,36 @@ class InteractiveSession:
                     "reason": "process_ended",
                     "exit_code": self.exit_code,
                     "before": self.process.before or "",
+                    "timeout_used": effective_timeout,
                 }
 
             else:  # TIMEOUT
+                # Provide more context for timeout failures
+                recent_output = self.process.before or ""
                 return {
                     "success": False,
                     "reason": "timeout",
-                    "before": self.process.before or "",
+                    "before": recent_output,
+                    "timeout_used": effective_timeout,
+                    "patterns_tried": patterns,
+                    "suggestion": "Consider increasing timeout or adjusting patterns",
                 }
 
+        except (pexpect.exceptions.TIMEOUT, OSError) as e:
+            return {
+                "success": False,
+                "reason": "expect_error",
+                "error": str(e),
+                "timeout_used": timeout or 30,
+                "suggestion": "Check if process is responsive or adjust patterns",
+            }
         except Exception as e:
-            return {"success": False, "reason": "error", "error": str(e)}
+            return {
+                "success": False,
+                "reason": "error",
+                "error": str(e),
+                "suggestion": "Check session state and command validity",
+            }
 
     async def send_input(self, input_text: str, add_newline: bool = True) -> None:
         """Send input to the session"""

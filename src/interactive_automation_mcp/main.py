@@ -86,14 +86,19 @@ async def create_interactive_session(
 ) -> CreateSessionResponse:
     """Create a new interactive session for program automation
 
-    Use this tool to start any interactive program that requires user input:
-    - Python debugger: 'python -u -m pdb script.py'
-    - SSH sessions: 'ssh user@host'
-    - Database clients: 'mysql -u root -p', 'psql -h localhost -U user'
-    - Interactive installers, configuration tools, or any CLI program
+    Universal tool for starting ANY interactive program that requires user input.
 
-    Returns a session_id that you'll use with other automation tools.
-    Sessions automatically timeout after the specified duration.
+    Examples:
+    - Debuggers: 'python -u -m pdb script.py', 'gdb ./program', 'node inspect app.js'
+    - Remote access: 'ssh user@host', 'telnet server', 'kubectl exec -it pod -- bash'
+    - Databases: 'mysql -u root -p', 'psql -h host -U user db', 'redis-cli'
+    - Development: 'npm run dev', 'docker exec -it container bash', 'make test'
+    - System tools: 'top', 'htop', 'vim file.txt', any interactive CLI tool
+
+    Returns a session_id for use with expect_and_respond and multi_step_automation.
+    Sessions auto-cleanup after timeout (default: 1 hour, max: 24 hours).
+
+    Pro tip: For one-off commands with simple automation, use execute_command instead.
     """
     logger.info(f"Creating session with command: {request.command}")
 
@@ -122,15 +127,19 @@ async def create_interactive_session(
 
 @mcp.tool()
 async def list_sessions(ctx: Context) -> ListSessionsResponse:
-    """List all active interactive sessions
+    """List all active interactive sessions with detailed status information
 
-    Use this tool to:
-    - Check which sessions are currently running
-    - Get session IDs for use with other tools
-    - Monitor session states (ACTIVE, WAITING, ERROR, etc.)
-    - See session creation times and last activity
+    Shows comprehensive session information:
+    - Session IDs and commands for identification
+    - Session states (active, waiting, error, terminated)
+    - Creation timestamps and last activity times
+    - Resource usage and timeout information
 
-    Essential for managing multiple concurrent automation workflows.
+    Use this to:
+    - Monitor multiple concurrent automation workflows
+    - Debug session issues and identify stuck processes
+    - Clean up unused sessions before hitting limits (max 50 concurrent)
+    - Get session IDs for use with other automation tools
     """
     app_ctx = ctx.request_context.lifespan_context
 
@@ -184,17 +193,23 @@ async def expect_and_respond(
 ) -> dict[str, Any]:
     """Wait for a pattern in session output and automatically respond
 
-    Use this tool for single-step automation when you need to:
-    - Wait for a specific prompt (e.g., 'Password:', '(Pdb)', '$ ')
-    - Send a response when the pattern appears
-    - Handle login prompts, debugger commands, or confirmation dialogs
+    Universal single-step automation for ANY interactive program.
 
-    Examples:
-    - Debugger: expect '(Pdb)' respond 'n' (next line)
-    - SSH: expect 'Password:' respond 'mypassword'
-    - Installer: expect 'Continue? [y/N]' respond 'y'
+    Pattern matching features:
+    - Supports regex patterns (e.g., '\\(Pdb\\)', 'Password.*:', 'Continue\\?.*')
+    - Case-sensitive or case-insensitive matching
+    - Automatic timeout handling with helpful error messages
+    - Enhanced error recovery and debugging information
 
-    For multiple steps, use multi_step_automation instead.
+    Common use cases:
+    - Debugger: expect '\\(Pdb\\)' respond 'n' (step to next line)
+    - SSH login: expect 'Password:' respond 'secretpass'
+    - Database: expect 'mysql>' respond 'SHOW DATABASES;'
+    - Installer: expect 'Continue\\? \\[y/N\\]' respond 'y'
+    - Shell: expect '\\$ ' respond 'ls -la'
+
+    For complex multi-step workflows, use multi_step_automation instead.
+    Returns detailed matching information and session state.
     """
     app_ctx = ctx.request_context.lifespan_context
 
@@ -216,19 +231,31 @@ async def expect_and_respond(
 async def multi_step_automation(
     request: MultiStepAutomationRequest, ctx: Context
 ) -> dict[str, Any]:
-    """Execute a sequence of expect/respond patterns
+    """Execute a sequence of expect/respond patterns for complex automation workflows
 
-    Use this tool for complex automation workflows requiring multiple steps:
-    - SSH login followed by command execution
-    - Database connection with authentication and queries
-    - Debugger sessions with multiple breakpoints and commands
-    - Software installation with multiple prompts
+    Universal multi-step automation engine for orchestrating complex interactive workflows.
 
-    Each step waits for its pattern before sending its response.
-    Set 'optional: true' for steps that might not appear.
-    Set 'stop_on_failure: false' to continue even if some steps fail.
+    Advanced features:
+    - Automatic error recovery with consecutive failure tracking
+    - Optional steps for conditional workflows
+    - Case-sensitive/insensitive pattern matching per step
+    - Detailed completion statistics and failure analysis
+    - Smart timeout handling with helpful suggestions
 
-    Perfect for scripting entire interactive workflows.
+    Real-world examples:
+    - SSH workflow: login → navigate → execute commands → collect results
+    - Database admin: connect → authenticate → run queries → backup
+    - Debugging session: set breakpoints → step through → inspect variables
+    - System deployment: connect → upload → configure → restart services
+    - Testing workflow: setup → run tests → collect results → cleanup
+
+    Configuration options:
+    - 'optional: true' - Skip failed steps without stopping workflow
+    - 'stop_on_failure: false' - Continue workflow even when steps fail
+    - 'case_sensitive: true' - Exact pattern matching (default: false)
+    - 'timeout: 60' - Custom timeout per step (default: 30 seconds)
+
+    Returns comprehensive results with success rates, failure analysis, and suggestions.
     """
     app_ctx = ctx.request_context.lifespan_context
 
@@ -254,21 +281,39 @@ async def multi_step_automation(
 async def execute_command(
     request: ExecuteCommandRequest, ctx: Context
 ) -> ExecuteCommandResponse:
-    """Execute any command with optional automation patterns
+    """Execute any command with optional automation patterns and follow-up commands
 
-    Universal tool for running any command with intelligent automation:
-    - Automatically handle prompts with regex patterns
-    - Execute follow-up commands after success
-    - Set custom environment variables and working directory
+    The most convenient automation tool - combines session creation, automation, and cleanup.
+    Perfect for one-off commands and simple automation workflows.
 
-    Use cases:
-    - Run scripts that prompt for input (automated responses)
-    - Execute commands requiring authentication (password prompts)
-    - Chain multiple commands with automated intermediate steps
-    - Handle interactive installers or configuration tools
+    Universal command execution:
+    - ANY command: 'ssh host', 'python script.py', 'docker run -it image', 'make install'
+    - Automatic prompt handling with regex patterns
+    - Follow-up command chaining for post-execution tasks
+    - Environment variables and working directory control
+    - Built-in session lifecycle management (create → automate → cleanup)
 
-    Combines session creation, automation, and cleanup in one tool.
-    For long-running debugging sessions, use create_interactive_session instead.
+    Automation patterns (optional):
+    - Pattern: regex to match prompts (e.g., 'Password:', 'Continue.*\\?')
+    - Response: text to send when pattern matches
+    - Automatic retry logic and error recovery
+
+    Follow-up commands (optional):
+    - Execute additional commands after automation completes
+    - Perfect for logging, cleanup, or chaining operations
+    - Example: ['echo "Task completed"', 'date', 'whoami']
+
+    When to use:
+    - Quick automation tasks with simple prompt handling
+    - One-off command execution with known prompts
+    - Scripts that need automated responses to continue
+
+    When to use create_interactive_session instead:
+    - Long-running debugging or interactive sessions
+    - Complex workflows requiring multiple tools
+    - Sessions you want to manage manually
+
+    Returns detailed execution results, automation statistics, and any errors.
     """
     app_ctx = ctx.request_context.lifespan_context
 
@@ -300,21 +345,25 @@ async def execute_command(
             for pattern_config in request.automation_patterns:
                 automation_steps.append(
                     {
-                        "pattern": pattern_config.pattern,
-                        "response": pattern_config.response,
+                        "expect": pattern_config.pattern,
+                        "respond": pattern_config.response,
                         "timeout": request.execution_timeout,
                     }
                 )
 
             # Execute automation
-            auth_result = await app_ctx.automation_engine.multi_step_automation(
+            auth_results = await app_ctx.automation_engine.multi_step_automation(
                 session_id=session_id, steps=automation_steps, stop_on_failure=True
             )
 
             automation_patterns_used = len(request.automation_patterns)
 
-            if not auth_result["success"]:
+            # Check if any automation step failed
+            automation_success = all(result["success"] for result in auth_results)
+            if not automation_success:
                 await app_ctx.session_manager.destroy_session(session_id)
+                failed_steps = [r for r in auth_results if not r["success"]]
+                error_msg = f"Automation failed: {failed_steps[0].get('reason', 'Unknown error')}"
                 return ExecuteCommandResponse(
                     success=False,
                     session_id=session_id,
@@ -322,7 +371,7 @@ async def execute_command(
                     executed=False,
                     automation_patterns_used=automation_patterns_used,
                     follow_up_commands_executed=0,
-                    error=f"Automation failed: {auth_result.get('error', 'Unknown error')}",
+                    error=error_msg,
                 )
 
         # Execute follow-up commands if provided
