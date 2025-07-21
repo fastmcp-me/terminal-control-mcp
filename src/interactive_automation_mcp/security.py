@@ -58,10 +58,11 @@ class SecurityManager:
         now = time.time()
 
         # Clean old entries
+        RATE_LIMIT_WINDOW_SECONDS = 60
         self.rate_limits[client_id] = [
             timestamp
             for timestamp in self.rate_limits[client_id]
-            if now - timestamp < 60  # 1 minute window
+            if now - timestamp < RATE_LIMIT_WINDOW_SECONDS  # 1 minute window
         ]
 
         # Check limit

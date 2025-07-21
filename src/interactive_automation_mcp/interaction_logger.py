@@ -154,47 +154,68 @@ class InteractionLogger:
         """Write human-readable log entry"""
         try:
             with open(self.readable_log, 'a') as f:
-                timestamp = event['timestamp']
-                rel_time = event['relative_time']
-                event_type = event['event_type']
-
-                f.write(f"\n[{timestamp}] (+{rel_time}s) {event_type.upper()}\n")
-                f.write("-" * 60 + "\n")
-
-                data = event.get('data', {})
-
-                if event_type == "screen_content":
-                    f.write(f"Description: {data.get('description', 'N/A')}\n")
-                    f.write(f"Content Length: {data.get('content_length', 0)} chars\n")
-                    f.write("Screen Content:\n")
-                    f.write("=" * 40 + "\n")
-                    f.write(data.get('clean_content', '') + "\n")
-                    f.write("=" * 40 + "\n")
-
-                elif event_type == "input_sent":
-                    f.write(f"Input Type: {data.get('input_type', 'unknown')}\n")
-                    f.write(f"Input Text: {data.get('input_text', '')}\n")
-                    f.write(f"Input Repr: {data.get('input_repr', '')}\n")
-
-                elif event_type == "wait_start":
-                    f.write(f"Pattern: {data.get('pattern', '')}\n")
-                    f.write(f"Timeout: {data.get('timeout', 0)}s\n")
-
-                elif event_type == "wait_result":
-                    f.write(f"Success: {data.get('success', False)}\n")
-                    f.write(f"Matched: {data.get('matched_text', 'N/A')}\n")
-                    f.write(f"Timeout: {data.get('timeout_occurred', False)}\n")
-
-                else:
-                    # Generic data dump
-                    for key, value in data.items():
-                        f.write(f"{key}: {value}\n")
-
+                self._write_header(f, event)
+                self._write_event_data(f, event)
                 f.write("\n")
                 f.flush()
-
         except Exception as e:
             logging.error(f"Failed to write readable log: {e}")
+
+    def _write_header(self, f: Any, event: dict[str, Any]) -> None:
+        """Write log entry header"""
+        timestamp = event['timestamp']
+        rel_time = event['relative_time']
+        event_type = event['event_type']
+
+        f.write(f"\n[{timestamp}] (+{rel_time}s) {event_type.upper()}\n")
+        f.write("-" * 60 + "\n")
+
+    def _write_event_data(self, f: Any, event: dict[str, Any]) -> None:
+        """Write event-specific data"""
+        data = event.get('data', {})
+        event_type = event['event_type']
+
+        if event_type == "screen_content":
+            self._write_screen_content(f, data)
+        elif event_type == "input_sent":
+            self._write_input_sent(f, data)
+        elif event_type == "wait_start":
+            self._write_wait_start(f, data)
+        elif event_type == "wait_result":
+            self._write_wait_result(f, data)
+        else:
+            self._write_generic_data(f, data)
+
+    def _write_screen_content(self, f: Any, data: dict[str, Any]) -> None:
+        """Write screen content data"""
+        f.write(f"Description: {data.get('description', 'N/A')}\n")
+        f.write(f"Content Length: {data.get('content_length', 0)} chars\n")
+        f.write("Screen Content:\n")
+        f.write("=" * 40 + "\n")
+        f.write(data.get('clean_content', '') + "\n")
+        f.write("=" * 40 + "\n")
+
+    def _write_input_sent(self, f: Any, data: dict[str, Any]) -> None:
+        """Write input sent data"""
+        f.write(f"Input Type: {data.get('input_type', 'unknown')}\n")
+        f.write(f"Input Text: {data.get('input_text', '')}\n")
+        f.write(f"Input Repr: {data.get('input_repr', '')}\n")
+
+    def _write_wait_start(self, f: Any, data: dict[str, Any]) -> None:
+        """Write wait start data"""
+        f.write(f"Pattern: {data.get('pattern', '')}\n")
+        f.write(f"Timeout: {data.get('timeout', 0)}s\n")
+
+    def _write_wait_result(self, f: Any, data: dict[str, Any]) -> None:
+        """Write wait result data"""
+        f.write(f"Success: {data.get('success', False)}\n")
+        f.write(f"Matched: {data.get('matched_text', 'N/A')}\n")
+        f.write(f"Timeout: {data.get('timeout_occurred', False)}\n")
+
+    def _write_generic_data(self, f: Any, data: dict[str, Any]) -> None:
+        """Write generic data dump"""
+        for key, value in data.items():
+            f.write(f"{key}: {value}\n")
 
     def _write_summary(self) -> None:
         """Write session summary"""
