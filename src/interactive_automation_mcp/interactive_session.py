@@ -172,8 +172,8 @@ class InteractiveSession:
                     return ""
                 process = self.process  # Type narrowing for mypy
                 try:
-                    # Read any available output
-                    result = process.read_nonblocking(size=65536)
+                    # Read any available output with a very short timeout
+                    result = process.read_nonblocking(size=65536, timeout=0.1)
                     return str(result) if result is not None else ""
                 except (pexpect.TIMEOUT, pexpect.EOF):
                     # Return what we have so far

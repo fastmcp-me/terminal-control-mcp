@@ -296,7 +296,7 @@ async def execute_command(request: ExecuteCommandRequest, ctx: Context) -> Execu
 
         output = await _capture_final_output(app_ctx.session_manager, session_id)
 
-        await app_ctx.session_manager.destroy_session(session_id)
+        
 
         return _create_success_response(
             session_id, full_command, automation_patterns_used,
@@ -347,7 +347,7 @@ async def _check_immediate_completion(
 
     if process_finished:
         logger.info("[DEBUG] Process finished, returning output immediately")
-        await session_manager.destroy_session(session_id)
+
         return ExecuteCommandResponse(
             success=True,
             session_id=session_id,
@@ -402,7 +402,7 @@ async def _handle_automation_failure(
     auth_results: list[Any], automation_patterns_used: int
 ) -> ExecuteCommandResponse:
     """Handle automation failure case"""
-    await session_manager.destroy_session(session_id)
+    
     failed_steps = [r for r in auth_results if not r["success"]]
     error_msg = f"Automation failed: {failed_steps[0].get('reason', 'Unknown error')}"
 

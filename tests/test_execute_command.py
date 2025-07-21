@@ -78,6 +78,8 @@ async def test_simple_command(command: str, expected_content: str, test_name: st
             assert expected_content in output, f"{test_name} failed: expected '{expected_content}' in {repr(output)}"
 
         print(f"✓ {test_name}: {repr(output.strip()[:50])}")
+        destroy_request = DestroySessionRequest(session_id=result.session_id)
+        await destroy_session(destroy_request, ctx)
         return True
 
     except Exception as e:
@@ -266,7 +268,7 @@ async def test_interactive_workflows() -> bool:
             "Python choice workflow"
         ),
         (
-            "bash -c \"read -p 'Enter value: ' val; echo \\\"You entered: \\$val\\\"\"",
+            "bash -c \"read -p 'Enter value: ' val; echo \\\"You entered: \\\$val\\\"\"",
             [("Enter value:", "test123")],
             "You entered: test123",
             "Bash input workflow"
@@ -343,6 +345,64 @@ async def test_python_repl_workflow() -> bool:
         print(f"✗ Python REPL workflow failed: {e}")
         return False
 
+async def _execute_pdb_interactions(ctx: Any, session_id: str) -> None:
+    """Execute Python debugger interaction sequence"""
+    interactions = [
+        ("(Pdb)", "b 25"),
+        ("(Pdb)", "c"),
+        ("(Pdb)", "p result"),
+        ("(Pdb)", "exit"),
+    ]
+
+    for expect_pattern, response_text in interactions:
+        expect_request = ExpectAndRespondRequest(
+            session_id=session_id,
+            expect_pattern=expect_pattern,
+            response=response_text,
+            timeout=10,
+            case_sensitive=False
+        )
+        result = await expect_and_respond(expect_request, ctx)
+        if not result.get("success"):
+            print(f"  Failed interaction: expect '{expect_pattern}' → respond '{response_text}': {result.get('error')}")
+        else:
+            print(f"  ✓ expect '{expect_pattern}' → respond '{response_text}'")
+
+async def test_python_debugger_workflow() -> bool:
+    """Test Python debugger (pdb) as a complex interactive workflow"""
+    print("=== Testing Python Debugger Workflow ===")
+    ctx = None
+    session_id = None
+    try:
+        ctx = await create_mock_context()
+        command = "python3 -m pdb examples/example_debug.py"
+        
+        request = ExecuteCommandRequest(
+            command=command,
+            execution_timeout=60
+        )
+        result = await execute_command(request, ctx)
+        assert result.success, f"Failed to start Pdb: {result.error}"
+        session_id = result.session_id
+        print(f"  Started Pdb session: {session_id}")
+
+        await _execute_pdb_interactions(ctx, session_id)
+        
+        destroy_request = DestroySessionRequest(session_id=session_id)
+        await destroy_session(destroy_request, ctx)
+        
+        print("✓ Python debugger workflow completed")
+        return True
+    except Exception as e:
+        print(f"✗ Python debugger workflow failed: {e}")
+        if ctx and session_id:
+            try:
+                destroy_request = DestroySessionRequest(session_id=session_id)
+                await destroy_session(destroy_request, ctx)
+                print(f"  ✓ Cleaned up session {session_id}")
+            except Exception as cleanup_error:
+                print(f"  ✗ Cleanup failed: {cleanup_error}")
+        return False
 
 async def main() -> bool:
     """Main function to run all tests"""
@@ -358,6 +418,7 @@ async def main() -> bool:
         await test_session_management(),
         await test_interactive_workflows(),
         await test_python_repl_workflow(),
+        await test_python_debugger_workflow(),
     ]
 
     # Summary

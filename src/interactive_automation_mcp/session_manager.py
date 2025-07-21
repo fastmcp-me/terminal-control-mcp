@@ -46,12 +46,6 @@ class SessionManager:
     ) -> str:
         """Create a new interactive session"""
 
-        # Check session limits
-        if len(self.sessions) >= self.max_sessions:
-            await self._cleanup_expired_sessions()
-            if len(self.sessions) >= self.max_sessions:
-                raise RuntimeError("Maximum session limit reached")
-
         # Generate unique session ID
         session_id = f"session_{uuid.uuid4().hex[:8]}"
 
@@ -106,15 +100,3 @@ class SessionManager:
     async def list_sessions(self) -> list[SessionMetadata]:
         """List all active sessions"""
         return list(self.session_metadata.values())
-
-    async def _cleanup_expired_sessions(self) -> None:
-        """Remove expired sessions"""
-        current_time = time.time()
-        expired_sessions = []
-
-        for session_id, metadata in self.session_metadata.items():
-            if current_time - metadata.last_activity > metadata.timeout:
-                expired_sessions.append(session_id)
-
-        for session_id in expired_sessions:
-            await self.destroy_session(session_id)
