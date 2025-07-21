@@ -7,34 +7,6 @@ Pydantic models for Interactive Automation MCP Server
 from pydantic import BaseModel, Field
 
 
-# Request/Response Models for Session Management
-class CreateSessionRequest(BaseModel):
-    """Request to create a new interactive session"""
-
-    command: str = Field(
-        description="Command to execute (e.g., 'ssh user@host', 'mysql -u root -p')"
-    )
-    session_name: str | None = Field(
-        None, description="Optional human-readable name for the session"
-    )
-    timeout: int = Field(3600, description="Session timeout in seconds")
-    environment: dict[str, str] | None = Field(
-        None, description="Environment variables to set"
-    )
-    working_directory: str | None = Field(
-        None, description="Working directory for the command"
-    )
-
-
-class CreateSessionResponse(BaseModel):
-    """Response from creating a session"""
-
-    success: bool
-    session_id: str
-    command: str
-    timeout: int
-
-
 class SessionInfo(BaseModel):
     """Information about a session"""
 
@@ -80,23 +52,6 @@ class ExpectAndRespondRequest(BaseModel):
     )
 
 
-class AutomationStep(BaseModel):
-    """A single automation step"""
-
-    name: str | None = Field(None, description="Human-readable step description for debugging")
-    expect: str = Field(description="Regex pattern to wait for (e.g., '(Pdb)', 'Password:', 'Continue\\\\? \\\\[y/N\\\\]')")
-    respond: str = Field(description="Text to send when pattern matches (e.g., 'b main', 'mypassword', 'y')")
-    timeout: int = Field(30, description="Timeout for this step")
-    optional: bool = Field(False, description="Whether this step is optional")
-
-
-class MultiStepAutomationRequest(BaseModel):
-    """Request for multi-step automation"""
-
-    session_id: str
-    steps: list[AutomationStep]
-    stop_on_failure: bool = Field(True, description="Whether to stop on first failure")
-
 
 # Request/Response Models for Universal Command Execution
 class AutomationPattern(BaseModel):
@@ -105,6 +60,7 @@ class AutomationPattern(BaseModel):
     pattern: str = Field(description="Regex pattern to match in output (e.g., 'Password:', 'Are you sure\\\\?', 'Enter.*:')")
     response: str = Field(description="Text to send when pattern matches (e.g., 'mypassword', 'yes', 'config_value')")
     secret: bool = Field(False, description="Whether response contains sensitive data")
+    delay_before_response: float = Field(0.0, description="Seconds to wait after pattern match before sending response")
 
 
 class ExecuteCommandRequest(BaseModel):
@@ -127,6 +83,10 @@ class ExecuteCommandRequest(BaseModel):
         None, description="Environment variables"
     )
     working_directory: str | None = Field(None, description="Working directory")
+    wait_after_automation: int | None = Field(
+        None, description="Seconds to wait after automation completes to capture additional output"
+    )
+
 
 
 class ExecuteCommandResponse(BaseModel):
@@ -138,4 +98,5 @@ class ExecuteCommandResponse(BaseModel):
     executed: bool
     automation_patterns_used: int
     follow_up_commands_executed: int
+    output: str | None = None
     error: str | None = None

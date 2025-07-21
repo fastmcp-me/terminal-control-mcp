@@ -30,13 +30,15 @@ class AutomationEngine:
             timeout = step.get("timeout", 30)
             optional = step.get("optional", False)
             case_sensitive = step.get("case_sensitive", False)
+            delay_before_response = step.get("delay_before_response", 0.0)
 
             try:
                 result = await session.expect_and_respond(
                     pattern=expect_pattern,
                     response=response,
                     timeout=timeout,
-                    case_sensitive=case_sensitive
+                    case_sensitive=case_sensitive,
+                    delay_before_response=delay_before_response
                 )
 
                 result["step_name"] = step_name

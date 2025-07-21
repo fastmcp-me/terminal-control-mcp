@@ -109,22 +109,9 @@ Once installed, configure the MCP server in your AI assistant:
 
 3. **Reload VS Code** to apply the configuration
 
-## 🛠️ Complete Tool Set (6 Enhanced Universal Tools)
+## 🛠️ Complete Tool Set (4 Enhanced Universal Tools)
 
-### 📋 Session Management (3 tools)
-
-#### **`create_interactive_session`**
-Universal tool for starting ANY interactive program that requires user input.
-
-**Examples:**
-- Debuggers: `python -u -m pdb script.py`, `gdb ./program`, `node inspect app.js`
-- Remote access: `ssh user@host`, `telnet server`, `kubectl exec -it pod -- bash`
-- Databases: `mysql -u root -p`, `psql -h host -U user db`, `redis-cli`
-- Development: `npm run dev`, `docker exec -it container bash`, `make test`
-- System tools: `top`, `htop`, `vim file.txt`, any interactive CLI tool
-
-Returns a session_id for use with expect_and_respond and multi_step_automation.
-Sessions auto-cleanup after timeout (default: 1 hour, max: 24 hours).
+### 📋 Session Management (2 tools)
 
 #### **`list_sessions`**
 List all active interactive sessions with detailed status information.
@@ -138,7 +125,7 @@ Shows comprehensive session information:
 #### **`destroy_session`**
 Terminate and cleanup an interactive session safely.
 
-### 🤖 Enhanced Automation (2 tools)
+### 🤖 Enhanced Automation (1 tool)
 
 #### **`expect_and_respond`**
 Universal single-step automation for ANY interactive program.
@@ -155,27 +142,12 @@ Universal single-step automation for ANY interactive program.
 - Database: expect `mysql>` respond `SHOW DATABASES;`
 - Installer: expect `Continue\? \[y/N\]` respond `y`
 
-#### **`multi_step_automation`**
-Universal multi-step automation engine for orchestrating complex interactive workflows.
-
-**Advanced features:**
-- Automatic error recovery with consecutive failure tracking
-- Optional steps for conditional workflows
-- Case-sensitive/insensitive pattern matching per step
-- Detailed completion statistics and failure analysis
-- Smart timeout handling with helpful suggestions
-
-**Real-world examples:**
+**Multi-step workflows:**
+For complex workflows, chain multiple expect_and_respond calls on the same session:
 - SSH workflow: login → navigate → execute commands → collect results
 - Database admin: connect → authenticate → run queries → backup
 - Debugging session: set breakpoints → step through → inspect variables
 - System deployment: connect → upload → configure → restart services
-
-**Configuration options:**
-- `optional: true` - Skip failed steps without stopping workflow
-- `stop_on_failure: false` - Continue workflow even when steps fail
-- `case_sensitive: true` - Exact pattern matching (default: false)
-- `timeout: 60` - Custom timeout per step (default: 30 seconds)
 
 ### 🔗 Universal Command Execution (1 tool)
 
