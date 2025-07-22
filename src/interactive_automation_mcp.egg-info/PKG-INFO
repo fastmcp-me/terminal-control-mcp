@@ -228,34 +228,85 @@ python tests/test_simplified_workflow.py
 
 ### Essential Tool Examples
 
-#### Session Management
+#### Basic Commands
 ```bash
-# Ask Claude Code:
-"Use execute_command to start 'python3 -u' and show me the session"
-"Use list_sessions to show all active sessions"
-"Use get_screen_content to see what's on screen right now"
-"Use send_input to send 'print(2+2)' to the Python session"
-"Use destroy_session to terminate session [session_id]"
+# Just ask Claude naturally:
+"Start a Python session and show me what's on screen"
+"List all my active terminal sessions" 
+"What's currently showing in the terminal?"
+"Type 'print(2+2)' in the Python session"
+"Close that debugging session for me"
 ```
 
-#### Interactive Terminal Control
+#### Interactive Programs
 ```bash
-# Ask Claude Code:
-"Start a Python REPL and calculate 2+2 step by step"
-"Connect to SSH and check disk usage interactively" 
-"Start mysql client and show tables when ready"
-"Launch a debugger and set breakpoints interactively"
-"Run 'ls -la' and show me the output"
-"Execute 'git status' and tell me what files are modified"
+# Natural requests:
+"Start a Python REPL and help me calculate 2+2"
+"SSH into that server and check disk space" 
+"Connect to mysql and show me the tables"
+"Debug this script and set some breakpoints"
+"Run ls -la and tell me what files are there"
+"Check git status and tell me what changed"
 ```
 
-#### Agent-Controlled Workflows
+#### Complex Workflows  
 ```bash
-# Ask Claude Code:
-"Start python debugger, wait for prompt, set breakpoint at line 10, then continue"
-"Connect to SSH, wait for login, enter password when prompted, then run 'ls'"
-"Start interactive installer, respond to prompts as they appear"
+# Just describe what you want:
+"Debug this Python script - set a breakpoint and step through it"
+"SSH to the server, enter my password when prompted, then check logs"
+"Install this software and handle any prompts that come up"
 ```
+
+### 🐛 Complete Debugging Tutorial with `examples/example_debug.py`
+
+This walkthrough shows how to debug a real Python script using natural language with Claude.
+
+#### Getting Started
+```
+> "Debug the file examples/example_debug.py and show me what we're working with"
+```
+
+Claude will start the Python debugger and show you:
+```
+> /path/to/examples/example_debug.py(36)main()
+-> print("Starting calculations...")
+(Pdb) 
+```
+
+#### Exploring the Code
+```
+> "Show me the source code around the current line"
+```
+
+Claude types `l` in the debugger and you see the code context.
+
+#### Finding the Bug
+```
+> "Set a breakpoint where the bug is, then run the program"
+```
+
+Claude sets the breakpoint with `b [line_number]`, continues with `c`, and the program runs until it hits the buggy loop.
+
+#### Investigating Variables
+```
+> "What variables do we have here? Show me their values"
+```
+
+Claude uses `pp locals()` to show you all the local variables at that point.
+
+#### Understanding the Problem  
+```
+> "Step through this loop and show me what's happening with the index"
+```
+
+Claude steps through with `n` and checks `p i, len(data)` to reveal the off-by-one error.
+
+#### Wrapping Up
+```
+> "We found the bug! Clean up this debugging session"
+```
+
+Claude terminates the debugger and cleans up the session.
 
 ### Advanced Usage Examples
 

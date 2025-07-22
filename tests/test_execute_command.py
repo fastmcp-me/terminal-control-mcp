@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Test the simplified MCP server architecture:
-- execute_command: Starts session, runs command
-- get_screen_content: Gets current terminal output
-- send_input: Sends input to sessions
-- list_sessions: Shows active sessions
-- destroy_session: Cleans up sessions
+Functional tests for command execution workflows
+Tests the core command execution functionality including:
+- Basic command execution and output capture
+- Interactive command workflows with input/output
+- Session lifecycle management
+- Python REPL and other interactive programs
 """
 
 import asyncio

@@ -169,7 +169,7 @@ class InteractiveSession:
     async def get_output(self, lines: int | None = None) -> str:
         """Get output from the automatic capture, prioritizing most recent content"""
         # Priority: automatic capture > current screen content > manual buffer
-        
+
         # First try automatic capture (most reliable for both interactive and non-interactive)
         if hasattr(self, "output_capture") and self.output_capture:
             captured = self.output_capture.getvalue()
@@ -182,14 +182,18 @@ class InteractiveSession:
                     full_output = current_content
                 else:
                     # Final fallback to manual buffer
-                    full_output = "\n".join(self.output_buffer) if self.output_buffer else ""
+                    full_output = (
+                        "\n".join(self.output_buffer) if self.output_buffer else ""
+                    )
         else:
             # No automatic capture, try current screen content then manual buffer
             current_content = await self.get_current_screen_content()
             if current_content and current_content.strip():
                 full_output = current_content
             else:
-                full_output = "\n".join(self.output_buffer) if self.output_buffer else ""
+                full_output = (
+                    "\n".join(self.output_buffer) if self.output_buffer else ""
+                )
 
         if lines is None:
             return full_output

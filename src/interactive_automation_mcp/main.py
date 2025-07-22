@@ -88,7 +88,7 @@ async def list_sessions(ctx: Context) -> ListSessionsResponse:
 
     Use this when users ask "list my sessions", "what sessions are running", "show active sessions",
     "what terminals are open", or to find session IDs for other operations.
-    
+
     Shows session information including IDs, commands, states, and timestamps.
     Use this to monitor workflows, debug issues, and get session IDs for other tools.
 
@@ -134,7 +134,7 @@ async def destroy_session(
 
     Use this when users ask to "close", "stop", "terminate", "kill", "exit", "end", or "clean up" a session.
     Examples: "close that session", "stop the debugger", "clean up when done", "exit that program".
-    
+
     Properly closes a session and frees up resources.
     Always destroy sessions when automation is complete.
 
@@ -151,7 +151,7 @@ async def destroy_session(
     - Force-close unresponsive sessions
     - Free up session slots (max 50 concurrent)
 
-    Use after: execute_command, get_screen_content, send_input workflows complete
+    IMPORTANT: Only destroy sessions when the user confirms they are done.
     """
     app_ctx = ctx.request_context.lifespan_context
 
@@ -170,11 +170,11 @@ async def get_screen_content(
 ) -> GetScreenContentResponse:
     """See what's currently displayed in a terminal session
 
-    Use this when users ask "what's on screen", "show me the output", "what's currently showing", 
+    Use this when users ask "what's on screen", "show me the output", "what's currently showing",
     "what do you see", or after starting any command with execute_command.
-    
+
     ALWAYS use this immediately after execute_command and send_input to see the program output.
-    
+
     Returns the current terminal output visible to the user. This allows the agent
     to see what's currently on screen and decide what to do next.
 
@@ -241,7 +241,7 @@ async def send_input(request: SendInputRequest, ctx: Context) -> SendInputRespon
 
     Use this when users ask to "type", "send", "enter", "input", "respond", "answer", or "press" something.
     Examples: "type 'ls -la'", "send 'print(2+2)'", "enter my password", "respond 'yes'", "press Enter".
-    
+
     Sends text input to the running process in the specified session.
     Use this when the agent determines the process is ready for input.
 
@@ -262,7 +262,7 @@ async def send_input(request: SendInputRequest, ctx: Context) -> SendInputRespon
     - Send keystrokes to any interactive terminal program
 
     Use after: get_screen_content (to verify process is ready for input)
-    
+
     IMPORTANT: Always follow send_input with get_screen_content to show users what happened.
     """
     app_ctx = ctx.request_context.lifespan_context
@@ -299,7 +299,7 @@ async def execute_command(
 
     Use this when users ask to "start", "run", "launch", "execute", "debug", "connect to", or "open" any program.
     Examples: "start Python", "debug this script", "connect to SSH", "run mysql client", "launch git status".
-    
+
     Creates a session and executes the specified command. ALL commands (interactive and
     non-interactive) create a persistent session that must be managed by the agent.
     No output is returned - agents must use get_screen_content to see terminal state.
@@ -327,7 +327,7 @@ async def execute_command(
     5. destroy_session - Clean up when finished (required for ALL sessions)
 
     Use with: get_screen_content (required), send_input (if needed), list_sessions, destroy_session (required)
-    
+
     IMPORTANT: Always follow execute_command with get_screen_content to show users what happened.
     """
     app_ctx = ctx.request_context.lifespan_context
