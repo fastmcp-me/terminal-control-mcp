@@ -1,38 +1,39 @@
 #!/usr/bin/env python3
 """
 Interactive Automation MCP Server - FastMCP Implementation
-Provides expect/pexpect-style automation for interactive programs
+Provides interactive terminal session management for LLM agents
 
 Core tools:
-- execute_command: Execute commands with automation (creates temporary sessions)
-- expect_and_respond: Single-step automation on existing sessions
+- execute_command: Execute commands and create sessions
+- get_screen_content: Get current terminal output from sessions
+- send_input: Send input to interactive sessions
 - list_sessions: Show active sessions
 - destroy_session: Clean up sessions
 """
 
-import asyncio
 import logging
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any
+from datetime import datetime
 
 from mcp.server.fastmcp import Context, FastMCP
 
-from .automation_engine import AutomationEngine
 from .models import (
     DestroySessionRequest,
     DestroySessionResponse,
     ExecuteCommandRequest,
     ExecuteCommandResponse,
-    ExpectAndRespondRequest,
+    GetScreenContentRequest,
+    GetScreenContentResponse,
     ListSessionsResponse,
+    SendInputRequest,
+    SendInputResponse,
     SessionInfo,
 )
 from .security import SecurityManager
 from .session_manager import SessionManager
-from .utils import wrap_command
 
 # Configure logging
 logging.basicConfig(
@@ -51,7 +52,6 @@ class AppContext:
     """Application context with all managers"""
 
     session_manager: SessionManager
-    automation_engine: AutomationEngine
     security_manager: SecurityManager
 
 
@@ -62,13 +62,11 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
 
     # Initialize components
     session_manager = SessionManager()
-    automation_engine = AutomationEngine(session_manager)
     security_manager = SecurityManager()
 
     try:
         yield AppContext(
             session_manager=session_manager,
-            automation_engine=automation_engine,
             security_manager=security_manager,
         )
     finally:
@@ -89,15 +87,21 @@ async def list_sessions(ctx: Context) -> ListSessionsResponse:
     """List all active interactive sessions with detailed status information
 
     Shows session information including IDs, commands, states, and timestamps.
-    Use this to monitor workflows, debug issues, and get session IDs.
+    Use this to monitor workflows, debug issues, and get session IDs for other tools.
 
     No parameters required.
 
-    Returns:
-    - Session IDs and commands for identification
-    - Session states (active, waiting, error, terminated)
-    - Creation timestamps and last activity times
-    - Total session count (max 50 concurrent)
+    Returns ListSessionsResponse with:
+    - success: bool - Operation success status
+    - sessions: List[SessionInfo] - List of active sessions
+      - session_id: str - Unique session identifier for use with other tools
+      - command: str - Original command that was executed
+      - state: str - Current session state
+      - created_at: float - Unix timestamp when session was created
+      - last_activity: float - Unix timestamp of last activity
+    - total_sessions: int - Total number of active sessions (max 50 concurrent)
+
+    Use with: get_screen_content, send_input, destroy_session
     """
     app_ctx = ctx.request_context.lifespan_context
 
@@ -114,25 +118,34 @@ async def list_sessions(ctx: Context) -> ListSessionsResponse:
         for session in sessions
     ]
 
-    return ListSessionsResponse(success=True, sessions=session_list, total_sessions=len(session_list))
+    return ListSessionsResponse(
+        success=True, sessions=session_list, total_sessions=len(session_list)
+    )
 
 
 @mcp.tool()
-async def destroy_session(request: DestroySessionRequest, ctx: Context) -> DestroySessionResponse:
+async def destroy_session(
+    request: DestroySessionRequest, ctx: Context
+) -> DestroySessionResponse:
     """Terminate and cleanup an interactive session
 
     Properly closes a session and frees up resources.
     Always destroy sessions when automation is complete.
 
-    Parameters:
-    - session_id: ID of the session to destroy
+    Parameters (DestroySessionRequest):
+    - session_id: str - ID of the session to destroy (from list_sessions or execute_command)
+
+    Returns DestroySessionResponse with:
+    - success: bool - True if session was found and destroyed, False if not found
+    - session_id: str - Echo of the requested session ID
+    - message: str - "Session destroyed" or "Session not found"
 
     Use this to:
     - Clean up finished automation sessions
     - Force-close unresponsive sessions
     - Free up session slots (max 50 concurrent)
 
-    Returns success status and cleanup message.
+    Use after: execute_command, get_screen_content, send_input workflows complete
     """
     app_ctx = ctx.request_context.lifespan_context
 
@@ -145,96 +158,160 @@ async def destroy_session(request: DestroySessionRequest, ctx: Context) -> Destr
     )
 
 
-# Basic Automation Tools
 @mcp.tool()
-async def expect_and_respond(request: ExpectAndRespondRequest, ctx: Context) -> dict[str, Any]:
-    """Wait for a pattern in session output and automatically respond
+async def get_screen_content(
+    request: GetScreenContentRequest, ctx: Context
+) -> GetScreenContentResponse:
+    """Get current screen content from an interactive session
 
-    Single-step automation for interactive programs. Waits for a regex pattern to appear
-    in the session output, then sends the specified response.
+    Returns the current terminal output visible to the user. This allows the agent
+    to see what's currently on screen and decide what to do next.
 
-    Parameters:
-    - session_id: Session ID from execute_command or active session
-    - expect_pattern: Regex pattern to wait for (e.g., 'Password:', '\\(Pdb\\)', 'mysql>')
-    - response: Text to send when pattern matches
-    - timeout: Max seconds to wait (default: 30)
-    - case_sensitive: Whether pattern matching is case-sensitive (default: false)
+    Parameters (GetScreenContentRequest):
+    - session_id: str - ID of the session to get screen content from (from execute_command or list_sessions)
 
-    Examples:
-    - Debugger: expect '\\(Pdb\\)' respond 'n' (step to next line)
-    - SSH login: expect 'Password:' respond 'mypassword'
-    - Database: expect 'mysql>' respond 'SHOW DATABASES;'
-    - Shell: expect '\\$ ' respond 'ls -la'
+    Returns GetScreenContentResponse with:
+    - success: bool - Operation success status
+    - session_id: str - Echo of the requested session ID
+    - process_running: bool - True if process is still active, False if terminated
+    - screen_content: str | None - Current terminal output (None if error)
+    - timestamp: str | None - ISO timestamp when screen content was captured
+    - error: str | None - Error message if operation failed
 
-    For complex workflows, chain multiple expect_and_respond calls on the same session.
-    Returns detailed matching information, session state, and captured output.
+    Use this tool to:
+    - Check what's currently displayed in the terminal
+    - See if a process is waiting for input
+    - Monitor progress of long-running commands
+    - Debug interactive program behavior
+    - Get timing information for agent decision-making
+
+    Use with: execute_command (to get session_id), send_input (when ready for input)
     """
     app_ctx = ctx.request_context.lifespan_context
 
     session = await app_ctx.session_manager.get_session(request.session_id)
     if not session:
-        return {"success": False, "error": "Session not found", "output": None}
+        return GetScreenContentResponse(
+            success=False,
+            session_id=request.session_id,
+            process_running=False,
+            timestamp=datetime.now().isoformat(),
+            error="Session not found",
+        )
 
-    result = await session.expect_and_respond(
-        pattern=request.expect_pattern,
-        response=request.response,
-        timeout=request.timeout,
-        case_sensitive=request.case_sensitive,
-    )
-
-    # Capture output for debugging, especially on timeout
-    # Add small delay to ensure all output is captured
-    await asyncio.sleep(0.2)
-    output = None
     try:
-        output = await session.get_output()
+        screen_content = await session.get_output()
+        process_running = session.is_process_alive()
+        timestamp = datetime.now().isoformat()
+
+        return GetScreenContentResponse(
+            success=True,
+            session_id=request.session_id,
+            process_running=process_running,
+            screen_content=screen_content,
+            timestamp=timestamp,
+        )
     except Exception as e:
-        logger.warning(f"Failed to capture output: {e}")
+        logger.warning(
+            f"Failed to get screen content for session {request.session_id}: {e}"
+        )
+        return GetScreenContentResponse(
+            success=False,
+            session_id=request.session_id,
+            process_running=False,
+            timestamp=datetime.now().isoformat(),
+            error=str(e),
+        )
 
-    # Add output to the result
-    result["output"] = output
 
-    return result  # type: ignore
-
-
-# Universal Command Execution Tool
 @mcp.tool()
-async def execute_command(request: ExecuteCommandRequest, ctx: Context) -> ExecuteCommandResponse:
-    """Execute any command with optional automation patterns and follow-up commands
+async def send_input(request: SendInputRequest, ctx: Context) -> SendInputResponse:
+    """Send input to an interactive session
 
-    All-in-one automation tool that combines session creation, automation, and cleanup.
-    Perfect for one-off commands and simple automation workflows.
+    Sends text input to the running process in the specified session.
+    Use this when the agent determines the process is ready for input.
 
-    Parameters:
-    - command: Command to execute (e.g., 'ssh host', 'python script.py', 'gemini')
-    - automation_patterns: List of pattern/response pairs for prompt handling (optional)
-    - follow_up_commands: Additional commands to run after automation (optional)
-    - wait_after_automation: Seconds to wait before capturing output (optional)
-    - execution_timeout: Max seconds for command execution (default: 30)
-    - environment: Environment variables to set (optional)
-    - working_directory: Directory to run command in (optional)
+    Parameters (SendInputRequest):
+    - session_id: str - ID of the session to send input to (from execute_command or list_sessions)
+    - input_text: str - Text to send to the process (newline automatically appended)
 
-    Automation pattern format:
-    - pattern: Regex to match prompts (e.g., 'Password:', 'Continue.*\\?')
-    - response: Text to send when pattern matches
-    - delay_before_response: Seconds to wait before sending response (optional)
+    Returns SendInputResponse with:
+    - success: bool - True if input was sent successfully, False if failed
+    - session_id: str - Echo of the requested session ID
+    - message: str - Confirmation message with echoed input text
+    - error: str | None - Error message if operation failed (None on success)
+
+    Use this tool to:
+    - Respond to prompts in interactive programs
+    - Enter commands in shells or REPL environments
+    - Provide input when programs are waiting for user response
+    - Send keystrokes to any interactive terminal program
+
+    Use after: get_screen_content (to verify process is ready for input)
+    
+    STRONGLY RECOMMENDED: Run get_screen_content immediately after to see the session's response.
+    """
+    app_ctx = ctx.request_context.lifespan_context
+
+    session = await app_ctx.session_manager.get_session(request.session_id)
+    if not session:
+        return SendInputResponse(
+            success=False, session_id=request.session_id, message="Session not found"
+        )
+
+    try:
+        await session.send_input(request.input_text)
+        return SendInputResponse(
+            success=True,
+            session_id=request.session_id,
+            message=f"Input sent successfully: '{request.input_text}'",
+        )
+    except Exception as e:
+        logger.warning(f"Failed to send input to session {request.session_id}: {e}")
+        return SendInputResponse(
+            success=False,
+            session_id=request.session_id,
+            message="Failed to send input",
+            error=str(e),
+        )
+
+
+# Command Execution Tool
+@mcp.tool()
+async def execute_command(
+    request: ExecuteCommandRequest, ctx: Context
+) -> ExecuteCommandResponse:
+    """Execute any command and create an interactive session
+
+    Creates a session and executes the specified command. ALL commands (interactive and
+    non-interactive) create a persistent session that must be managed by the agent.
+    No output is returned - agents must use get_screen_content to see terminal state.
+
+    Parameters (ExecuteCommandRequest):
+    - command: str - Command to execute (e.g., 'ssh host', 'python -u script.py', 'ls', 'mysql')
+    - command_args: List[str] | None - Additional command arguments (optional)
+    - execution_timeout: int - Max seconds for process startup (default: 30, agents control interaction timing)
+    - environment: Dict[str, str] | None - Environment variables to set (optional)
+    - working_directory: str | None - Directory to run command in (optional)
+
+    Returns ExecuteCommandResponse with:
+    - success: bool - True if session was created and command started, False if failed
+    - session_id: str - Unique session identifier for use with other tools
+    - command: str - Full command that was executed (including args)
 
     IMPORTANT: For interactive programs that buffer output, use unbuffered mode.
-    Buffered output means prompts may not appear immediately, causing automation
-    timeouts when expect patterns cannot see the text until buffers flush.
     Use flags like: python -u, stdbuf -o0, or program-specific unbuffered options.
 
-    Examples:
-    - SSH with password: command='ssh user@host', patterns=[{pattern:'Password:', response:'mypass'}]
-    - Interactive installer: command='./install.sh', patterns=[{pattern:'Continue\\?', response:'y'}]
-    - AI chatbot: command='gemini', patterns=[{pattern:'>', response:'Hello'}], wait_after_automation=5
+    Agent workflow for ALL commands:
+    1. execute_command - Creates session and starts process
+    2. get_screen_content - Agent sees current terminal state (output or interface)
+    3. send_input - Agent sends input if process is waiting for interaction
+    4. Repeat steps 2-3 as needed (agent controls timing)
+    5. destroy_session - Clean up when finished (required for ALL sessions)
 
-    For multi-step workflows:
-    - Use execute_command to start a session
-    - Chain expect_and_respond calls for subsequent interactions
-    - Sessions persist until destroyed or timeout
-
-    Returns execution results, automation statistics, and captured output.
+    Use with: get_screen_content (required), send_input (if needed), list_sessions, destroy_session (required)
+    
+    STRONGLY RECOMMENDED: Run get_screen_content immediately after to see the session's initial state.
     """
     app_ctx = ctx.request_context.lifespan_context
 
@@ -250,257 +327,31 @@ async def execute_command(request: ExecuteCommandRequest, ctx: Context) -> Execu
         full_command += " " + " ".join(request.command_args)
 
     try:
-        # Create session and get initial state
-        session_id = await _create_session(app_ctx.session_manager, full_command, request)
-
-        # Check for immediate completion
-        immediate_result = await _check_immediate_completion(
-            app_ctx.session_manager, session_id, full_command
+        # Create session
+        logger.info(f"Creating session for command: {full_command}")
+        session_id = await app_ctx.session_manager.create_session(
+            command=full_command,
+            timeout=request.execution_timeout,
+            environment=request.environment,
+            working_directory=request.working_directory,
         )
-        if immediate_result:
-            return immediate_result
-
-        # Handle automation patterns
-        automation_result = await _handle_automation_patterns(
-            app_ctx, session_id, full_command, request
-        )
-        if automation_result:
-            return automation_result
-
-        automation_patterns_used = len(request.automation_patterns or [])
-
-        # If no automation patterns were provided, check if process is waiting for input
-        # In this case, return session for manual interaction via expect_and_respond
-        if not request.automation_patterns:
-            session = await app_ctx.session_manager.get_session(session_id)
-            if session and session.is_process_alive():
-                logger.info("[DEBUG] No automation patterns provided and process is waiting - returning session for manual interaction")
-                # Get current output and return session for manual interaction
-                current_output = await _safe_get_output(app_ctx.session_manager, session_id)
-                return ExecuteCommandResponse(
-                    success=True,
-                    session_id=session_id,
-                    command=full_command,
-                    executed=True,
-                    automation_patterns_used=0,
-                    follow_up_commands_executed=0,
-                    output=current_output,
-                )
-
-        # Execute follow-up commands and finalize
-        follow_up_commands_executed = await _execute_follow_up_commands(
-            app_ctx.session_manager, session_id, request.follow_up_commands or []
-        )
-
-        await _wait_for_additional_output(request.wait_after_automation)
-
-        output = await _capture_final_output(app_ctx.session_manager, session_id)
-
-        
-
-        return _create_success_response(
-            session_id, full_command, automation_patterns_used,
-            follow_up_commands_executed, output
-        )
-
-    except Exception as e:
-        return _handle_execution_error(e, full_command)
-
-
-# Helper functions for execute_command
-def _validate_security(security_manager: Any, request: ExecuteCommandRequest) -> None:
-    """Validate security for execute_command request"""
-    if not security_manager.validate_tool_call("execute_command", request.model_dump()):
-        raise ValueError("Security violation: Tool call rejected")
-
-def _build_full_command(request: ExecuteCommandRequest) -> str:
-    """Build full command string from request"""
-    full_command = request.command
-    if request.command_args:
-        full_command += " " + " ".join(request.command_args)
-    return full_command
-
-async def _create_session(session_manager: Any, full_command: str, request: ExecuteCommandRequest) -> str:
-    """Create and return session ID"""
-    logger.info(f"[DEBUG] Starting execute_command for: {full_command}")
-    logger.info("[DEBUG] Creating session...")
-    session_id = await session_manager.create_session(
-        command=full_command,
-        timeout=request.execution_timeout,
-        environment=request.environment,
-        working_directory=request.working_directory,
-    )
-    logger.info(f"[DEBUG] Session created with ID: {session_id}")
-    return str(session_id)
-
-async def _check_immediate_completion(
-    session_manager: Any, session_id: str, full_command: str
-) -> ExecuteCommandResponse | None:
-    """Check if process completed immediately and return result if so"""
-    session = await session_manager.get_session(session_id)
-    if not session:
-        return None
-
-    logger.info("[DEBUG] Checking if process has finished or is waiting for input...")
-    # Reduced timeout for faster interactive detection
-    process_finished, initial_output = await session.wait_for_completion_or_input(timeout=2.0)
-
-    if process_finished:
-        logger.info("[DEBUG] Process finished, returning output immediately")
 
         return ExecuteCommandResponse(
             success=True,
             session_id=session_id,
             command=full_command,
-            executed=True,
-            automation_patterns_used=0,
-            follow_up_commands_executed=0,
-            output=initial_output,
         )
 
-    logger.info("[DEBUG] Process still running, continuing with automation patterns if provided...")
-    return None
-
-async def _handle_automation_patterns(
-    app_ctx: Any, session_id: str, full_command: str, request: ExecuteCommandRequest
-) -> ExecuteCommandResponse | None:
-    """Handle automation patterns if provided"""
-    if not request.automation_patterns:
-        return None
-
-    logger.info(f"[DEBUG] Processing {len(request.automation_patterns)} automation patterns")
-    automation_steps = _convert_automation_patterns(request)
-
-    logger.info("[DEBUG] Starting automation...")
-    auth_results = await app_ctx.automation_engine.multi_step_automation(
-        session_id=session_id, steps=automation_steps, stop_on_failure=True
-    )
-    logger.info("[DEBUG] Automation completed")
-
-    automation_success = all(result["success"] for result in auth_results)
-    if not automation_success:
-        return await _handle_automation_failure(
-            app_ctx.session_manager, session_id, full_command, auth_results, len(request.automation_patterns)
+    except Exception as e:
+        logger.error(f"Error executing command: {e}")
+        # For session creation failures, we could raise an exception instead
+        # but for now, return failure with empty session_id
+        return ExecuteCommandResponse(
+            success=False,
+            session_id="",
+            command=full_command,
         )
 
-    return None
-
-def _convert_automation_patterns(request: ExecuteCommandRequest) -> list[dict[str, Any]]:
-    """Convert automation patterns to automation engine format"""
-    return [
-        {
-            "expect": pattern_config.pattern,
-            "respond": pattern_config.response,
-            "timeout": request.execution_timeout,
-            "delay_before_response": pattern_config.delay_before_response,
-        }
-        for pattern_config in request.automation_patterns or []
-    ]
-
-async def _handle_automation_failure(
-    session_manager: Any, session_id: str, full_command: str,
-    auth_results: list[Any], automation_patterns_used: int
-) -> ExecuteCommandResponse:
-    """Handle automation failure case"""
-    
-    failed_steps = [r for r in auth_results if not r["success"]]
-    error_msg = f"Automation failed: {failed_steps[0].get('reason', 'Unknown error')}"
-
-    output = await _safe_get_output(session_manager, session_id)
-
-    return ExecuteCommandResponse(
-        success=False,
-        session_id=session_id,
-        command=full_command,
-        executed=False,
-        automation_patterns_used=automation_patterns_used,
-        follow_up_commands_executed=0,
-        output=output,
-        error=error_msg,
-    )
-
-async def _execute_follow_up_commands(
-    session_manager: Any, session_id: str, follow_up_commands: list[str]
-) -> int:
-    """Execute follow-up commands and return count executed"""
-    if not follow_up_commands:
-        return 0
-
-    executed_count = 0
-    try:
-        session = await session_manager.get_session(session_id)
-        if session:
-            for cmd in follow_up_commands:
-                await session.send_input(cmd)
-                await asyncio.sleep(0.5)
-                executed_count += 1
-    except Exception as e:
-        logger.warning(f"Follow-up command failed: {e}")
-
-    return executed_count
-
-async def _wait_for_additional_output(wait_after_automation: int | None) -> None:
-    """Wait for additional output if requested"""
-    if wait_after_automation and wait_after_automation > 0:
-        logger.info(f"Waiting {wait_after_automation} seconds to capture additional output...")
-        await asyncio.sleep(wait_after_automation)
-    else:
-        await asyncio.sleep(0.5)
-
-async def _capture_final_output(session_manager: Any, session_id: str) -> str | None:
-    """Capture final output with retry logic"""
-    MAX_ATTEMPTS = 3
-    for attempt in range(MAX_ATTEMPTS):
-        try:
-            session = await session_manager.get_session(session_id)
-            if session:
-                return str(await session.get_output())
-        except Exception as e:
-            if attempt == MAX_ATTEMPTS - 1:
-                logger.warning(f"Failed to capture output after {attempt + 1} attempts: {e}")
-            else:
-                await asyncio.sleep(0.2)
-    return None
-
-def _handle_execution_error(error: Exception, full_command: str) -> ExecuteCommandResponse:
-    """Handle execution error and create error response"""
-    logger.error(f"Error executing command: {error}")
-    return ExecuteCommandResponse(
-        success=False,
-        session_id="",
-        command=full_command,
-        executed=False,
-        automation_patterns_used=0,
-        follow_up_commands_executed=0,
-        output=None,
-        error=str(error),
-    )
-
-def _create_success_response(
-    session_id: str, full_command: str, automation_patterns_used: int,
-    follow_up_commands_executed: int, output: str | None
-) -> ExecuteCommandResponse:
-    """Create successful execution response"""
-    return ExecuteCommandResponse(
-        success=True,
-        session_id=session_id,
-        command=full_command,
-        executed=True,
-        automation_patterns_used=automation_patterns_used,
-        follow_up_commands_executed=follow_up_commands_executed,
-        output=output,
-    )
-
-async def _safe_get_output(session_manager: Any, session_id: str) -> str | None:
-    """Safely get output from session without hanging on interactive processes"""
-    try:
-        session = await session_manager.get_session(session_id)
-        if session:
-            # Use the fast output method to avoid hanging on interactive processes
-            return str(await session._get_output_fast())
-    except Exception as e:
-        logger.warning(f"Failed to capture output: {e}")
-    return None
 
 def main() -> None:
     """Entry point for the server"""

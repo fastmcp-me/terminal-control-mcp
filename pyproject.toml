@@ -29,7 +29,6 @@ classifiers = [
 dependencies = [
     "mcp>=1.0.0",
     "pexpect>=4.8.0",
-    "ptyprocess>=0.7.0",
     "typing-extensions>=4.0.0",
     "pydantic>=2.11.7",
 ]
@@ -37,8 +36,6 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "mcp[cli]>=1.0.0",
-    "pytest>=7.0.0",
-    "pytest-asyncio>=0.21.0",
     "black>=22.0.0",
     "isort>=5.10.0",
     "mypy>=0.950",
@@ -122,14 +119,8 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
+"tests/*.py" = ["PLR0915"]  # Allow longer test functions
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = "-v --tb=short"
-asyncio_mode = "auto"
 
 [tool.ruff.lint.mccabe]
 # Set the maximum allowed complexity. Functions exceeding this will be flagged.

@@ -3,7 +3,7 @@
 Test the simplified MCP server architecture:
 - execute_command: Starts session, runs command
 - get_screen_content: Gets current terminal output
-- send_input: Sends input to sessions
+- send_input: Sends input to session
 - list_sessions: Shows active sessions
 - destroy_session: Cleans up sessions
 """
@@ -43,7 +43,7 @@ def setup_test_logging() -> str:
 
     # Generate log filename with timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = os.path.join(log_dir, f"test_execution_{timestamp}.log")
+    log_file = os.path.join(log_dir, f"test_simplified_{timestamp}.log")
 
     # Configure logging
     logger = logging.getLogger("interactive-automation-mcp")
@@ -86,7 +86,10 @@ async def test_simple_command(
     try:
         ctx = await create_mock_context()
 
-        request = ExecuteCommandRequest(command=command, execution_timeout=30)
+        request = ExecuteCommandRequest(
+            command=command,
+            execution_timeout=30,
+        )
 
         result = await execute_command(request, ctx)
 
@@ -119,7 +122,10 @@ async def test_interactive_workflow(
         ctx = await create_mock_context()
 
         # 1. Start interactive command
-        request = ExecuteCommandRequest(command=command, execution_timeout=60)
+        request = ExecuteCommandRequest(
+            command=command,
+            execution_timeout=60,
+        )
         result = await execute_command(request, ctx)
         assert result.success, f"{test_name} execute_command failed: {result.error}"
         session_id = result.session_id

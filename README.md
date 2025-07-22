@@ -1,6 +1,6 @@
 # Interactive Automation MCP Server
 
-A modern FastMCP-based server that enables Claude Code to perform expect/pexpect-style automation for interactive programs. Built with the latest MCP Python SDK 1.12.0, this server provides intelligent automation for programs that require user interaction, such as SSH sessions, database connections, interactive installers, and debugging workflows.
+A modern FastMCP-based server that enables Claude Code to control ANY terminal programs through agent-directed automation. Built with the latest MCP Python SDK 1.12.0, this server provides intelligent terminal session management for all types of commands - from simple utilities like `ls` and `git status` to complex interactive programs like SSH sessions, database connections, interactive installers, and debugging workflows.
 
 ## ✨ Features
 
@@ -11,22 +11,20 @@ A modern FastMCP-based server that enables Claude Code to perform expect/pexpect
 - **🎯 Automatic Schema Generation**: JSON schemas generated from Python type hints
 - **🔄 Lifespan Management**: Proper startup/shutdown with resource cleanup
 
-### 🚀 **Enhanced Automation Features**
-- **🔄 Automated Interactive Sessions**: Handle complex multi-step interactions with terminal programs
-- **🎯 Smart Pattern Matching**: Enhanced regex support with case-insensitive options
-- **📊 Advanced Session Management**: Maintain persistent sessions with automatic cleanup
-- **🛡️ Error Recovery**: Consecutive failure tracking and automatic retry logic
-- **🔍 Detailed Debugging**: Comprehensive error reporting with helpful suggestions
-- **🐛 Universal Debugging**: Debug ANY program (GDB, PDB, LLDB, custom debuggers)
-- **🚀 Universal Command Execution**: Run ANY terminal command with optional automation
+### 🚀 **Agent-Controlled Terminal Automation**
+- **🎯 Agent-Controlled Interaction**: Agents have full control over timing and interaction flow
+- **📊 Session Management**: Maintain persistent sessions with automatic cleanup
+- **🔍 Real-time Screen Content**: Get current terminal output with timestamps
+- **🛡️ Simplified Design**: No complex automation patterns - agents decide when to act
+- **🐛 Universal Terminal Support**: Control ANY terminal program (interactive and non-interactive)
 - **🔒 User-Controlled Security**: Maximum flexibility with user responsibility
 
 ### 💪 **Performance & Reliability**
-- **📦 Minimal Dependencies**: Only 4 essential dependencies (reduced from 9)
+- **📦 Minimal Dependencies**: Only essential dependencies for terminal interaction
 - **⚡ Fast Installation**: Lightweight package with minimal footprint
 - **🛡️ Type Safety**: Full type coverage with mypy and Pydantic validation
 - **🧹 Clean Code**: Modern Python with black formatting and ruff linting
-- **⏱️ Smart Timeouts**: Enhanced timeout handling with automatic recovery
+- **⏱️ Smart Timeouts**: Process startup timeouts only - agents control interaction timing
 
 ## 🚀 Quick Start
 
@@ -109,192 +107,75 @@ Once installed, configure the MCP server in your AI assistant:
 
 3. **Reload VS Code** to apply the configuration
 
-## 🛠️ Complete Tool Set (4 Enhanced Universal Tools)
+## 🛠️ Complete Tool Set (5 Agent-Controlled Tools)
 
 ### 📋 Session Management (2 tools)
 
 #### **`list_sessions`**
-List all active interactive sessions with detailed status information.
+List all active terminal sessions with detailed status information.
 
 Shows comprehensive session information:
 - Session IDs and commands for identification
 - Session states (active, waiting, error, terminated)
 - Creation timestamps and last activity times
-- Resource usage and timeout information
+- Total session count (max 50 concurrent)
 
 #### **`destroy_session`**
-Terminate and cleanup an interactive session safely.
+Terminate and cleanup a terminal session safely.
 
-### 🤖 Enhanced Automation (1 tool)
+### 🤖 Agent-Controlled Interaction (2 tools)
 
-#### **`expect_and_respond`**
-Universal single-step automation for ANY interactive program.
+#### **`get_screen_content`**
+Get current terminal screen content with timestamp.
 
-**Pattern matching features:**
-- Supports regex patterns (e.g., `\(Pdb\)`, `Password.*:`, `Continue\?.*`)
-- Case-sensitive or case-insensitive matching
-- Automatic timeout handling with helpful error messages
-- Enhanced error recovery and debugging information
+**Key features:**
+- Returns current terminal output visible to user
+- Includes ISO timestamp for agent timing decisions
+- Process running status
+- Agents decide when to wait longer based on timestamps
 
-**Common use cases:**
-- Debugger: expect `\(Pdb\)` respond `n` (step to next line)
-- SSH login: expect `Password:` respond `secretpass`
-- Database: expect `mysql>` respond `SHOW DATABASES;`
-- Installer: expect `Continue\? \[y/N\]` respond `y`
+**Agent workflow:**
+1. Call `get_screen_content` to see current terminal state
+2. Analyze screen content and timestamp
+3. Decide whether to wait longer or take action
+4. Use `send_input` when process is ready for input
 
-**Multi-step workflows:**
-For complex workflows, chain multiple expect_and_respond calls on the same session:
-- SSH workflow: login → navigate → execute commands → collect results
-- Database admin: connect → authenticate → run queries → backup
-- Debugging session: set breakpoints → step through → inspect variables
-- System deployment: connect → upload → configure → restart services
+#### **`send_input`**
+Send text input to a terminal session.
 
-### 🔗 Universal Command Execution (1 tool)
+**Features:**
+- Send any text input to the running process
+- Automatic newline appending
+- No timeouts - agents control timing
+- Works with any terminal program
+
+### 🔗 Session Creation (1 tool)
 
 #### **`execute_command`**
-Execute any command with optional automation patterns and follow-up commands.
-
-The most convenient automation tool - combines session creation, automation, and cleanup.
-Perfect for one-off commands and simple automation workflows.
+Execute any command and create a terminal session.
 
 **Universal command execution:**
-- ANY command: `ssh host`, `python script.py`, `docker run -it image`, `make install`
-- Automatic prompt handling with regex patterns
-- Follow-up command chaining for post-execution tasks
+- ANY command: `ssh host`, `python script.py`, `ls`, `docker run -it image`, `make install`
+- ALL commands create persistent sessions (interactive and non-interactive)
+- Process startup timeout only (default: 30 seconds)
 - Environment variables and working directory control
-- Built-in session lifecycle management (create → automate → cleanup)
+- NO output returned - agents must use `get_screen_content` to see terminal state
+- Returns session ID for agent-controlled interaction
 
-**When to use:**
-- Quick automation tasks with simple prompt handling
-- One-off command execution with known prompts
-- Scripts that need automated responses to continue
+**Agent-controlled workflow for ALL commands:**
+1. `execute_command` - Creates session and starts process
+2. `get_screen_content` - Agent sees current terminal state (output or interface) with timestamp
+3. `send_input` - Agent sends input if process is waiting for interaction
+4. Repeat steps 2-3 as needed (agent controls timing)
+5. `destroy_session` - Clean up when finished (REQUIRED for all sessions)
 
-**When to use create_interactive_session instead:**
-- Long-running debugging or interactive sessions
-- Complex workflows requiring multiple tools
-- Sessions you want to manage manually
-
-## 📚 Complete Tutorial & Examples
+## 📚 Usage Examples & Tutorial
 
 ### Prerequisites
 
-- Python 3.10+ installed (updated requirement)
+- Python 3.10+ installed
 - Claude Code CLI installed and configured
 - Basic familiarity with command line tools
-- Understanding of debugging concepts
-
-### Step-by-Step Debugging Tutorial
-
-We'll use the provided `examples/example_debug.py` file to demonstrate all tools. This script contains intentional bugs perfect for debugging practice.
-
-#### Example Script Analysis
-
-The script includes:
-- `factorial(n)`: Recursive factorial calculation
-- `fibonacci(n)`: Recursive Fibonacci calculation  
-- `divide_numbers(a, b)`: Division with potential zero division
-- `buggy_function()`: Intentional index out of bounds error
-- `main()`: Orchestrates all function calls
-
-#### Tutorial Steps
-
-Start Claude Code and ensure the MCP server is loaded:
-
-```bash
-claude code
-```
-
-#### Step 1: Create a Debugging Session
-
-Ask Claude to create an interactive Python debugger session:
-
-> "Use the create_interactive_session tool to start a Python debugger session for the file examples/example_debug.py. Set the session name to 'Python Debugger Session' and timeout to 1800 seconds."
-
-Claude will execute:
-- Command: `python -u -m pdb examples/example_debug.py`
-- Working directory: current project directory
-- This creates a Python debugger session and returns a session ID
-
-#### Step 2: Verify Session Creation
-
-Ask Claude to check active sessions:
-
-> "Use the list_sessions tool to show me all active sessions."
-
-This confirms your debugging session was created and shows its current state.
-
-#### Step 3: Set Breakpoints with Multi-Step Automation
-
-Ask Claude to set up the debugging environment:
-
-> "Use the multi_step_automation tool on my debugging session to:
-> 1. Set a breakpoint at the buggy_function
-> 2. Set a breakpoint at divide_numbers  
-> 3. List all breakpoints to verify
-> Make sure to wait for the (Pdb) prompt between each step."
-
-Claude will:
-- Wait for the debugger prompt
-- Execute `b buggy_function` to set first breakpoint
-- Execute `b divide_numbers` to set second breakpoint  
-- Execute `b` to list breakpoints
-
-#### Step 4: Start Execution and Debug Division
-
-Ask Claude to begin debugging:
-
-> "Use the expect_and_respond tool to start execution with 'c' command, then when we hit the divide_numbers breakpoint (look for '-> return a / b'), print the values of variables a and b using 'p a, b'."
-
-This demonstrates:
-- Continuing execution until breakpoint
-- Examining variable values at runtime
-- Understanding the division by zero scenario
-
-#### Step 5: Debug Through Exception Handling
-
-Continue debugging the error handling:
-
-> "Use multi_step_automation to:
-> 1. Continue execution past this breakpoint
-> 2. When we hit the zero division case again, examine the variables
-> 3. Check the stack trace with 'bt'
-> 4. Continue past the handled exception
-> Set stop_on_failure to false since some steps might not match exactly."
-
-This shows how the script properly handles the division by zero error.
-
-#### Step 6: Debug the Index Error
-
-Focus on the intentional bug:
-
-> "Use expect_and_respond to continue until we reach the buggy_function breakpoint (look for '-> result += data[i]'), then print the values of i, len(data), and data to see the index error."
-
-This reveals:
-- The loop goes one iteration too far
-- Index `i` equals `len(data)` causing the error
-- How the bug manifests in practice
-
-#### Step 7: Run Complete Script with Automation
-
-Demonstrate the execute_command tool:
-
-> "Use the execute_command tool to run the complete script (python examples/example_debug.py) with automation patterns that respond to the expected error messages:
-> - When you see 'Error caught: division by zero', respond with an echo confirming it was handled
-> - When you see 'Bug found: list index out of range', respond with an echo noting the error was detected
-> Also add follow-up commands to log that the debugging session completed."
-
-This demonstrates:
-- Running scripts with automated responses to expected outputs
-- Handling multiple error scenarios
-- Adding follow-up actions after execution
-
-#### Step 8: Clean Up
-
-Finally, clean up the session:
-
-> "Use the destroy_session tool to terminate my debugging session."
-
-This properly closes the debugger and frees resources.
 
 ### Quick Start Commands
 
@@ -307,7 +188,7 @@ claude mcp add interactive-automation -s user interactive-automation-mcp
 claude mcp list
 
 # Test basic functionality
-python tests/test_basic.py
+python tests/test_simplified_workflow.py
 ```
 
 ### Essential Tool Examples
@@ -315,69 +196,82 @@ python tests/test_basic.py
 #### Session Management
 ```bash
 # Ask Claude Code:
-"Use create_interactive_session tool with command 'echo hello world' and then use list_sessions tool"
-"Use create_interactive_session tool: python3 -c 'import code; code.interact()' to calculate 2+2"
-"Use destroy_session tool to terminate session [session_id]"
+"Use execute_command to start 'python3 -u' and show me the session"
+"Use list_sessions to show all active sessions"
+"Use get_screen_content to see what's on screen right now"
+"Use send_input to send 'print(2+2)' to the Python session"
+"Use destroy_session to terminate session [session_id]"
 ```
 
-#### Basic Automation
+#### Interactive Terminal Control
 ```bash
 # Ask Claude Code:
-"Use expect_and_respond tool on session [session_id] to wait for 'Name:' pattern and respond 'Alice'"
-"Use multi_step_automation tool with steps: wait for 'login:', respond 'user', then wait for 'password:', respond 'pass'"
+"Start a Python REPL and calculate 2+2 step by step"
+"Connect to SSH and check disk usage interactively" 
+"Start mysql client and show tables when ready"
+"Launch a debugger and set breakpoints interactively"
+"Run 'ls -la' and show me the output"
+"Execute 'git status' and tell me what files are modified"
 ```
 
-#### Universal Command Execution
+#### Agent-Controlled Workflows
 ```bash
 # Ask Claude Code:
-"Use execute_command tool: 'top' with execution_timeout 5 seconds then destroy session"
-"Use execute_command tool: 'ssh localhost' with automation patterns for password prompts"
-"Use execute_command tool: 'docker exec -it mycontainer bash' with follow-up commands to list files"
+"Start python debugger, wait for prompt, set breakpoint at line 10, then continue"
+"Connect to SSH, wait for login, enter password when prompted, then run 'ls'"
+"Start interactive installer, respond to prompts as they appear"
 ```
 
 ### Advanced Usage Examples
 
-#### Complex Debugging Scenarios
+#### Multi-Step Interactive Sessions
 
-**Multiple Sessions**: Create separate sessions for different components:
-> "Create one session for the main script and another for testing individual functions."
-
-**Conditional Automation**: Handle optional steps:
-> "Set up multi-step automation where some steps are marked as optional in case the program flow varies."
-
-**Environment Setup**: Configure debugging environments:
-> "Create a session with custom environment variables like PYTHONPATH and DEBUG_MODE set."
-
-#### Real-World Applications
-
-**Database Debugging**:
-> "Create a session for mysql client and automate login prompts."
+**Python Debugging**:
+> "Start a Python debugger session, wait for the (Pdb) prompt, set a breakpoint, then continue execution and examine variables when we hit it."
 
 **SSH Session Management**:
-> "Set up automated SSH connections with password or key prompts."
+> "Connect to SSH server, wait for password prompt, authenticate, then navigate to log directory and monitor the latest log file."
 
-**Interactive Installers**:
-> "Automate software installation prompts and configuration steps."
+**Database Interaction**:
+> "Start mysql client, wait for connection, authenticate when prompted, then show databases and describe table structure."
+
+### Real-World Applications
+
+**Development Workflows**:
+- Interactive debugging with GDB, PDB, LLDB
+- Git operations requiring user input
+- Docker container interaction
+- Kubernetes pod debugging
+
+**System Administration**:
+- SSH server management
+- Database administration
+- Interactive installers and configurators
+- System monitoring and diagnostics
+
+**Testing and QA**:
+- Interactive test runners
+- Manual testing of CLI tools
+- Integration testing across systems
 
 ### Troubleshooting
 
 #### Common Issues
 
 **Session Won't Start**:
-- Verify the command exists: `which python`
-- Check file permissions: `ls -la examples/example_debug.py`
+- Verify the command exists and is executable
+- Check file permissions and paths
 - Ensure working directory is correct
 
-**Automation Patterns Don't Match**:
-- Test patterns manually in the debugger first
-- Check if output formatting differs from expected
-- Increase timeout values for slow responses
-- Try case-insensitive matching with `case_sensitive: false`
+**Process Not Responding**:
+- Use `get_screen_content` to see current state
+- Check timestamps to see if output is recent
+- Look for blocking prompts requiring input
 
 **Session Becomes Unresponsive**:
-- Use list_sessions to check session state
-- Use destroy_session to clean up and start fresh
-- Check for blocking prompts requiring input
+- Use `list_sessions` to check session state
+- Use `destroy_session` to clean up and start fresh
+- Check for programs waiting for input
 
 #### Debug Mode
 
@@ -387,18 +281,12 @@ export INTERACTIVE_AUTOMATION_LOG_LEVEL=DEBUG
 claude code
 ```
 
-#### Getting Help
-
-- Ask Claude to list sessions if you lose track
-- Use expect_and_respond with simple patterns to test connectivity
-- Check MCP server status: `claude mcp list`
-
 ### Development Testing
 
 ```bash
-# Run basic functionality tests
-python tests/test_core.py
-python tests/test_basic.py
+# Run functionality tests
+python tests/test_simplified_workflow.py
+python tests/test_execute_command.py
 
 # Install with development dependencies
 pip install -e ".[dev]"
@@ -413,61 +301,64 @@ pytest tests/
 
 ## 💡 Universal Examples
 
-### 🔑 Interactive Session Examples
-```bash
-# Natural language commands to Claude (keywords that trigger MCP tools):
-"Create interactive session: SSH to prod.example.com and check disk usage"
-"Execute command: mysql -u root -p and show tables"
-"Create session: gdb myprogram and set breakpoints"
-"Execute interactively: python -m pdb myscript.py"
-"Run with automation: ssh user@host (handle password prompts)"
-"Create interactive session: docker exec -it container bash"
-"Execute command: kubectl exec -it pod sh and list files"
-"Start session: redis-cli and check memory usage"
-```
-
-### 🚀 Truly Universal Examples
-```bash
-# ANY command that runs in a terminal:
-"Run interactive session: ssh user@host"
-"Execute interactively: docker exec -it myapp bash"
-"Start session: kubectl exec -it pod-name -- sh"
-"Launch: nc -l 8080"
-"Run: socat - TCP:localhost:3000"
-"Start interactive Python: python3 -c 'import code; code.interact()'"
-"Launch my custom REPL: ./my-custom-repl --debug"
-"Open serial connection: minicom /dev/ttyUSB0"
-"Start screen session: screen /dev/ttyACM0 9600"
-"Attach to tmux: tmux attach-session -t main"
-```
-
-### 🐍 Python Debugging Examples
+### 🔑 Agent-Controlled Interactive Examples
 ```bash
 # Natural language commands to Claude:
-"Start a PDB debugging session with my Python script bug_script.py"
-"Debug my Flask app: set breakpoints, inspect variables, and trace execution"
-"Connect to a running Python process with PDB and debug live issues"
-"Analyze a Python crash: load core dump, examine stack trace, identify root cause"
+"Start SSH session to prod.example.com, wait for prompts, handle authentication"
+"Launch Python debugger, set breakpoints when ready, step through execution"
+"Start mysql client, authenticate when prompted, then run diagnostic queries"
+"Connect to docker container interactively, explore filesystem step by step"
+"Launch Redis CLI, wait for connection, then check memory usage"
 ```
 
-### 🔧 Advanced Automation
+### 🚀 Terminal Program Examples
+```bash
+# Primary use cases - Interactive and long-running commands:
+"Start session: ssh user@host"
+"Launch: docker exec -it myapp bash"
+"Run: kubectl exec -it pod-name -- sh"
+"Debug: gdb ./myprogram"
+"Profile: python -m pdb myscript.py"
+"Monitor: tail -f /var/log/syslog"
+"Stream: nc -l 8080"
+"Connect: minicom /dev/ttyUSB0"
+"Attach: tmux attach-session -t main"
+
+# Also works with simple commands (though direct execution may be more efficient):
+"Execute: ls -la /var/log"
+"Run: git status"
+"Check: ps aux | grep python"
+```
+
+### 🐍 Agent-Controlled Debugging
 ```bash
 # Natural language commands to Claude:
-"Connect to SSH, then connect to database, run diagnostics, and generate report"
-"Debug the crashed server binary, analyze the core dump, and suggest fixes"
-"Connect to multiple servers, check their status, and restart services if needed"
-"Set up debugging session with custom debugger and analyze the issue"
+"Start PDB debugging session, wait for prompt, then set strategic breakpoints"
+"Launch debugger, examine crash point, analyze variables step by step"
+"Debug Flask app interactively: set breakpoints, trace requests, inspect state"
+"Attach to running process, debug live issues with agent timing control"
+```
+
+### 🔧 Complex Agent Workflows
+```bash
+# Natural language commands to Claude:
+"SSH to server, authenticate, check services, restart if needed - handle all prompts"
+"Debug crashed program: load core dump, analyze stack, suggest fixes interactively"
+"Database maintenance: connect, check health, run maintenance, monitor progress"
+"Deploy application: upload, configure, test, rollback if issues - handle all interactions"
 ```
 
 ## 🔒 Security
 
-**Universal Design Philosophy**: Maximum flexibility with user responsibility
-- **No command filtering** - All commands allowed (including `sudo`, `su`, system commands)
-- **No path restrictions** - All paths accessible (user controls access)
+**Agent-Controlled Design Philosophy**: Maximum flexibility with user responsibility
+- **No command filtering** - All commands allowed (agents control what runs)
+- **No path restrictions** - All paths accessible (user controls access)  
+- **All commands create sessions** - Both interactive and non-interactive commands create persistent sessions
+- **Agent-controlled output** - No direct output from execute_command, agents use get_screen_content
 - **Rate limiting** - 60 calls per minute to prevent abuse
 - **Session limits** - 50 concurrent sessions to prevent resource exhaustion
 - **Comprehensive logging** - Full audit trail of all operations
-- **User responsibility** - Security is managed by the user, not the MCP server
+- **User responsibility** - Security is managed by the user and agent, not the MCP server
 
 ## 📁 Project Structure
 
@@ -481,28 +372,38 @@ interactive-automation-mcp/
 │       ├── __init__.py        # Package initialization
 │       ├── main.py            # Main MCP server entry point (FastMCP)
 │       ├── session_manager.py # Session lifecycle management
-│       ├── automation_engine.py # Enhanced automation engine
-│       ├── interactive_session.py # Session handling with error recovery
+│       ├── interactive_session.py # Terminal session handling
 │       ├── security.py        # Security controls and validation
 │       ├── models.py          # Pydantic models for type safety
-│       └── ...                # Other modules
+│       ├── interaction_logger.py # Comprehensive logging
+│       └── utils.py           # Utility functions
 ├── tests/                      # Comprehensive test suite
-├── docs/                       # Documentation
-└── examples/                   # Example scripts for tutorials
-    └── example_debug.py       # Tutorial debugging script
+│   ├── test_simplified_workflow.py # Main functionality tests
+│   ├── test_execute_command.py     # Command execution tests
+│   └── test_new_workflow.py        # Workflow validation tests
+└── docs/                       # Documentation
 ```
 
 ## 🚀 Development Status
 
-- ✅ **Production Ready** - All 6 universal tools implemented and tested
+- ✅ **Production Ready** - All 5 agent-controlled tools implemented and tested
 - ✅ **FastMCP Architecture** - Modern MCP Python SDK 1.12.0 implementation
-- ✅ **Enhanced Automation** - Smart pattern matching, error recovery, timeout handling
+- ✅ **Agent-Controlled Design** - Simplified architecture with agent timing control
 - ✅ **Type Safety** - Full Pydantic model validation and mypy type coverage
-- ✅ **Minimal Dependencies** - Only 4 essential dependencies (reduced from 9)
-- ✅ **Complete Security** - Comprehensive security controls with user responsibility
+- ✅ **Minimal Dependencies** - Only essential dependencies for terminal interaction
+- ✅ **Comprehensive Security** - Security controls with user/agent responsibility
 - ✅ **Clean Architecture** - Well-organized, maintainable code with modern tooling
-- ✅ **Python Debugging** - Full PDB integration with comprehensive tutorial
+- ✅ **Universal Terminal Support** - Works with ANY terminal program
 - ✅ **Code Quality** - All linting (ruff) and type checking (mypy) passes
+
+## 🔄 Architecture Changes
+
+**Major Simplification (2025)**: Transitioned from complex automation patterns to agent-controlled interaction:
+- **Removed**: Complex expect/respond automation engine
+- **Added**: Agent timing control with timestamped screen content
+- **Simplified**: Only process startup timeouts - agents control interaction timing
+- **Enhanced**: Real-time screen content access with timestamps
+- **Result**: Cleaner, more reliable, agent-directed terminal automation
 
 ## 📄 License
 

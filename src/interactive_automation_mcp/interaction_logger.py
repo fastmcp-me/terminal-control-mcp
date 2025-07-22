@@ -11,6 +11,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .models import LogEventData
+
 
 class InteractionLogger:
     """Structured logger for debugging interactive automation sessions"""
@@ -25,7 +27,7 @@ class InteractionLogger:
         self.log_file = self.log_dir / f"session_{session_id}_{timestamp}.json"
 
         # Initialize log structure
-        self.events: list[dict[str, Any]] = []
+        self.events: list[LogEventData] = []
         self.session_start_time = time.time()
 
         # Also create a human-readable log
@@ -39,12 +41,12 @@ class InteractionLogger:
         timestamp = time.time()
         relative_time = timestamp - self.session_start_time
 
-        event = {
-            "timestamp": datetime.fromtimestamp(timestamp).isoformat(),
-            "relative_time": round(relative_time, 3),
-            "event_type": event_type,
-            "data": data or {}
-        }
+        event = LogEventData(
+            event_type=event_type,
+            timestamp=timestamp,
+            relative_time=round(relative_time, 3),
+            data=data or {},
+        )
 
         self.events.append(event)
 
@@ -54,83 +56,110 @@ class InteractionLogger:
         # Write human-readable version
         self._write_readable(event)
 
-    def log_screen_content(self, content: str, description: str = "screen_capture") -> None:
+    def log_screen_content(
+        self, content: str, description: str = "screen_capture"
+    ) -> None:
         """Log current screen content"""
         # Clean up ANSI escape codes for readable version
         clean_content = self._clean_ansi(content)
 
-        self.log_event("screen_content", {
-            "description": description,
-            "raw_content": content,
-            "clean_content": clean_content,
-            "content_length": len(content)
-        })
+        self.log_event(
+            "screen_content",
+            {
+                "description": description,
+                "raw_content": content,
+                "clean_content": clean_content,
+                "content_length": len(content),
+            },
+        )
 
     def log_input_sent(self, input_text: str, input_type: str = "user_input") -> None:
         """Log input sent to session"""
-        self.log_event("input_sent", {
-            "input_text": input_text,
-            "input_type": input_type,
-            "input_length": len(input_text),
-            "input_repr": repr(input_text)  # Shows escape sequences
-        })
+        self.log_event(
+            "input_sent",
+            {
+                "input_text": input_text,
+                "input_type": input_type,
+                "input_length": len(input_text),
+                "input_repr": repr(input_text),  # Shows escape sequences
+            },
+        )
 
     def log_wait_start(self, pattern: str, timeout: int) -> None:
         """Log start of expect/wait operation"""
-        self.log_event("wait_start", {
-            "pattern": pattern,
-            "timeout": timeout,
-            "action": "waiting_for_pattern"
-        })
+        self.log_event(
+            "wait_start",
+            {"pattern": pattern, "timeout": timeout, "action": "waiting_for_pattern"},
+        )
 
-    def log_wait_result(self, success: bool, matched_text: str | None = None,
-                       timeout_occurred: bool = False) -> None:
+    def log_wait_result(
+        self,
+        success: bool,
+        matched_text: str | None = None,
+        timeout_occurred: bool = False,
+    ) -> None:
         """Log result of expect/wait operation"""
-        self.log_event("wait_result", {
-            "success": success,
-            "matched_text": matched_text,
-            "timeout_occurred": timeout_occurred
-        })
+        self.log_event(
+            "wait_result",
+            {
+                "success": success,
+                "matched_text": matched_text,
+                "timeout_occurred": timeout_occurred,
+            },
+        )
 
-    def log_command_execution(self, command: str, working_dir: str | None = None) -> None:
+    def log_command_execution(
+        self, command: str, working_dir: str | None = None
+    ) -> None:
         """Log command execution"""
-        self.log_event("command_execution", {
-            "command": command,
-            "working_directory": working_dir
-        })
+        self.log_event(
+            "command_execution", {"command": command, "working_directory": working_dir}
+        )
 
-    def log_session_state(self, state: str, details: dict[str, Any] | None = None) -> None:
+    def log_session_state(
+        self, state: str, details: dict[str, Any] | None = None
+    ) -> None:
         """Log session state changes"""
-        self.log_event("session_state", {
-            "state": state,
-            "details": details or {}
-        })
+        self.log_event("session_state", {"state": state, "details": details or {}})
 
-    def log_automation_step(self, step_number: int, step_type: str,
-                           step_data: dict[str, Any]) -> None:
+    def log_automation_step(
+        self, step_number: int, step_type: str, step_data: dict[str, Any]
+    ) -> None:
         """Log automation step execution"""
-        self.log_event("automation_step", {
-            "step_number": step_number,
-            "step_type": step_type,
-            "step_data": step_data
-        })
+        self.log_event(
+            "automation_step",
+            {
+                "step_number": step_number,
+                "step_type": step_type,
+                "step_data": step_data,
+            },
+        )
 
-    def log_error(self, error_type: str, error_message: str,
-                  stack_trace: str | None = None) -> None:
+    def log_error(
+        self, error_type: str, error_message: str, stack_trace: str | None = None
+    ) -> None:
         """Log errors and exceptions"""
-        self.log_event("error", {
-            "error_type": error_type,
-            "error_message": error_message,
-            "stack_trace": stack_trace
-        })
+        self.log_event(
+            "error",
+            {
+                "error_type": error_type,
+                "error_message": error_message,
+                "stack_trace": stack_trace,
+            },
+        )
 
-    def close_session(self, exit_code: int | None = None, final_output: str | None = None) -> None:
+    def close_session(
+        self, exit_code: int | None = None, final_output: str | None = None
+    ) -> None:
         """Close the logging session"""
-        self.log_event("session_end", {
-            "exit_code": exit_code,
-            "total_duration": time.time() - self.session_start_time,
-            "total_events": len(self.events)
-        })
+        self.log_event(
+            "session_end",
+            {
+                "exit_code": exit_code,
+                "total_duration": time.time() - self.session_start_time,
+                "total_events": len(self.events),
+            },
+        )
 
         if final_output:
             self.log_screen_content(final_output, "final_output")
@@ -141,19 +170,23 @@ class InteractionLogger:
     def _write_json(self) -> None:
         """Write events to JSON file"""
         try:
-            with open(self.log_file, 'w') as f:
-                json.dump({
-                    "session_id": self.session_id,
-                    "session_start_time": self.session_start_time,
-                    "events": self.events
-                }, f, indent=2)
+            with open(self.log_file, "w") as f:
+                json.dump(
+                    {
+                        "session_id": self.session_id,
+                        "session_start_time": self.session_start_time,
+                        "events": [event.to_dict() for event in self.events],
+                    },
+                    f,
+                    indent=2,
+                )
         except Exception as e:
             logging.error(f"Failed to write interaction log: {e}")
 
-    def _write_readable(self, event: dict[str, Any]) -> None:
+    def _write_readable(self, event: LogEventData) -> None:
         """Write human-readable log entry"""
         try:
-            with open(self.readable_log, 'a') as f:
+            with open(self.readable_log, "a") as f:
                 self._write_header(f, event)
                 self._write_event_data(f, event)
                 f.write("\n")
@@ -161,19 +194,19 @@ class InteractionLogger:
         except Exception as e:
             logging.error(f"Failed to write readable log: {e}")
 
-    def _write_header(self, f: Any, event: dict[str, Any]) -> None:
+    def _write_header(self, f: Any, event: LogEventData) -> None:
         """Write log entry header"""
-        timestamp = event['timestamp']
-        rel_time = event['relative_time']
-        event_type = event['event_type']
+        timestamp = datetime.fromtimestamp(event.timestamp).isoformat()
+        rel_time = event.relative_time
+        event_type = event.event_type
 
         f.write(f"\n[{timestamp}] (+{rel_time}s) {event_type.upper()}\n")
         f.write("-" * 60 + "\n")
 
-    def _write_event_data(self, f: Any, event: dict[str, Any]) -> None:
+    def _write_event_data(self, f: Any, event: LogEventData) -> None:
         """Write event-specific data"""
-        data = event.get('data', {})
-        event_type = event['event_type']
+        data = event.data
+        event_type = event.event_type
 
         if event_type == "screen_content":
             self._write_screen_content(f, data)
@@ -192,7 +225,7 @@ class InteractionLogger:
         f.write(f"Content Length: {data.get('content_length', 0)} chars\n")
         f.write("Screen Content:\n")
         f.write("=" * 40 + "\n")
-        f.write(data.get('clean_content', '') + "\n")
+        f.write(data.get("clean_content", "") + "\n")
         f.write("=" * 40 + "\n")
 
     def _write_input_sent(self, f: Any, data: dict[str, Any]) -> None:
@@ -222,7 +255,7 @@ class InteractionLogger:
         try:
             summary_file = self.log_dir / f"session_{self.session_id}_summary.txt"
 
-            with open(summary_file, 'w') as f:
+            with open(summary_file, "w") as f:
                 f.write("INTERACTION LOG SUMMARY\n")
                 f.write(f"Session ID: {self.session_id}\n")
                 f.write(f"Total Events: {len(self.events)}\n")
@@ -235,7 +268,7 @@ class InteractionLogger:
                 # Count event types
                 event_counts: dict[str, int] = {}
                 for event in self.events:
-                    event_type = event['event_type']
+                    event_type = event.event_type
                     event_counts[event_type] = event_counts.get(event_type, 0) + 1
 
                 for event_type, count in sorted(event_counts.items()):
@@ -248,13 +281,14 @@ class InteractionLogger:
     def _clean_ansi(text: str) -> str:
         """Remove ANSI escape codes for readable output"""
         import re
-        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-        return ansi_escape.sub('', text)
+
+        ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+        return ansi_escape.sub("", text)
 
     def get_log_files(self) -> dict[str, str]:
         """Get paths to all log files for this session"""
         return {
             "json": str(self.log_file),
             "readable": str(self.readable_log),
-            "summary": str(self.log_dir / f"session_{self.session_id}_summary.txt")
+            "summary": str(self.log_dir / f"session_{self.session_id}_summary.txt"),
         }

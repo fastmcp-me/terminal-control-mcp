@@ -4,6 +4,9 @@ Pydantic models for Interactive Automation MCP Server
 """
 
 
+from dataclasses import dataclass, field
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -39,54 +42,88 @@ class DestroySessionResponse(BaseModel):
     message: str
 
 
-# Request/Response Models for Basic Automation
-class ExpectAndRespondRequest(BaseModel):
-    """Request for expect and respond operation"""
+class GetScreenContentRequest(BaseModel):
+    """Request to get current screen content from a session"""
 
+    session_id: str = Field(description="ID of the session to get screen content from")
+
+
+class GetScreenContentResponse(BaseModel):
+    """Response with current screen content"""
+
+    success: bool
     session_id: str
-    expect_pattern: str = Field(description="Regex pattern to wait for (e.g., '(Pdb)', 'Password:', '$ ')")
-    response: str = Field(description="Text to send when pattern matches (e.g., 'n', 'mypassword', 'ls')")
-    timeout: int = Field(30, description="Timeout in seconds")
-    case_sensitive: bool = Field(
-        False, description="Whether pattern matching is case sensitive"
+    process_running: bool
+    screen_content: str | None = None
+    timestamp: str | None = Field(
+        None, description="ISO timestamp when screen content was captured"
     )
+    error: str | None = None
 
 
+class SendInputRequest(BaseModel):
+    """Request to send input to a session"""
 
-# Request/Response Models for Universal Command Execution
-class AutomationPattern(BaseModel):
-    """Automation pattern for command execution"""
+    session_id: str = Field(description="ID of the session to send input to")
+    input_text: str = Field(description="Text to send to the process")
 
-    pattern: str = Field(description="Regex pattern to match in output (e.g., 'Password:', 'Are you sure\\\\?', 'Enter.*:')")
-    response: str = Field(description="Text to send when pattern matches (e.g., 'mypassword', 'yes', 'config_value')")
-    secret: bool = Field(False, description="Whether response contains sensitive data")
-    delay_before_response: float = Field(0.0, description="Seconds to wait after pattern match before sending response")
+
+class SendInputResponse(BaseModel):
+    """Response from sending input to a session"""
+
+    success: bool
+    session_id: str
+    message: str
+    error: str | None = None
+
+
+@dataclass
+class EnvironmentConfig:
+    """Environment configuration for command execution"""
+
+    variables: dict[str, str]
+
+    def to_dict(self) -> dict[str, str]:
+        return self.variables
+
+    @classmethod
+    def from_dict(cls, env_dict: dict[str, str]) -> "EnvironmentConfig":
+        return cls(variables=env_dict)
 
 
 class ExecuteCommandRequest(BaseModel):
-    """Request to execute a command with optional automation"""
+    """Request to execute a command and create a session"""
 
     command: str = Field(description="Command to execute")
     command_args: list[str] | None = Field(
         None, description="Additional command arguments"
     )
-    automation_patterns: list[AutomationPattern] | None = Field(
-        None, description="Automation patterns to handle prompts (password, confirmation, input requests)"
-    )
     execution_timeout: int = Field(
-        30, description="Timeout in seconds for command execution"
-    )
-    follow_up_commands: list[str] | None = Field(
-        None, description="Commands to run after automation completes (e.g., ['echo done', 'exit'])"
+        30,
+        description="Timeout in seconds for process startup (agents control interaction timing)",
     )
     environment: dict[str, str] | None = Field(
         None, description="Environment variables"
     )
     working_directory: str | None = Field(None, description="Working directory")
-    wait_after_automation: int | None = Field(
-        None, description="Seconds to wait after automation completes to capture additional output"
-    )
 
+
+@dataclass
+class LogEventData:
+    """Structured data for logging events"""
+
+    event_type: str
+    timestamp: float
+    relative_time: float
+    data: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "event_type": self.event_type,
+            "timestamp": self.timestamp,
+            "relative_time": self.relative_time,
+            "data": self.data,
+        }
 
 
 class ExecuteCommandResponse(BaseModel):
@@ -95,8 +132,3 @@ class ExecuteCommandResponse(BaseModel):
     success: bool
     session_id: str
     command: str
-    executed: bool
-    automation_patterns_used: int
-    follow_up_commands_executed: int
-    output: str | None = None
-    error: str | None = None

@@ -1,8 +1,31 @@
 import logging
 import time
-from collections import defaultdict
+from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class RateLimitData:
+    """Rate limiting data for a client"""
+
+    client_id: str
+    call_timestamps: list[float] = field(default_factory=list)
+
+    def add_call(self, timestamp: float) -> None:
+        """Add a new call timestamp"""
+        self.call_timestamps.append(timestamp)
+
+    def clean_old_calls(self, window_seconds: int = 60) -> None:
+        """Remove calls older than the window"""
+        now = time.time()
+        self.call_timestamps = [
+            ts for ts in self.call_timestamps if now - ts < window_seconds
+        ]
+
+    def get_recent_call_count(self) -> int:
+        """Get count of recent calls"""
+        return len(self.call_timestamps)
 
 
 class SecurityManager:
@@ -15,7 +38,7 @@ class SecurityManager:
         # Universal design: No command whitelist - only block dangerous patterns
         # Any command is allowed as long as it doesn't match blocked patterns
 
-        self.rate_limits: dict[str, list[float]] = defaultdict(list)
+        self.rate_limits: dict[str, RateLimitData] = {}
         self.max_calls_per_minute = 60
         self.max_sessions = 50
 
@@ -57,18 +80,19 @@ class SecurityManager:
         """Check if client is within rate limits"""
         now = time.time()
 
+        # Get or create rate limit data for client
+        if client_id not in self.rate_limits:
+            self.rate_limits[client_id] = RateLimitData(client_id)
+
+        rate_data = self.rate_limits[client_id]
+
         # Clean old entries
-        RATE_LIMIT_WINDOW_SECONDS = 60
-        self.rate_limits[client_id] = [
-            timestamp
-            for timestamp in self.rate_limits[client_id]
-            if now - timestamp < RATE_LIMIT_WINDOW_SECONDS  # 1 minute window
-        ]
+        rate_data.clean_old_calls()
 
         # Check limit
-        if len(self.rate_limits[client_id]) >= self.max_calls_per_minute:
+        if rate_data.get_recent_call_count() >= self.max_calls_per_minute:
             return False
 
         # Record this call
-        self.rate_limits[client_id].append(now)
+        rate_data.add_call(now)
         return True
