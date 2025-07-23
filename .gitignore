@@ -1,3 +1,6 @@
 /.venv
 /__pycache__
 /src/interactive_automation_mcp.egg-info/
+/build/
+/src/terminal_control_mcp.egg-info/
+/src/interactive_automation_mcp/
