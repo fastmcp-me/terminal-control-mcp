@@ -136,7 +136,6 @@ async def tercon_destroy_session(
     Examples: "close that session", "stop the debugger", "clean up when done", "exit that program".
 
     Properly closes a session and frees up resources.
-    Always destroy sessions when automation is complete.
 
     Parameters (DestroySessionRequest):
     - session_id: str - ID of the session to destroy (from tercon_list_sessions or tercon_execute_command)
@@ -151,7 +150,7 @@ async def tercon_destroy_session(
     - Force-close unresponsive sessions
     - Free up session slots (max 50 concurrent)
 
-    IMPORTANT: Only destroy sessions when the user confirms they are done.
+    IMPORTANT: Only destroy sessions when the user explicitly requests it or when the session is no longer needed.
     """
     app_ctx = ctx.request_context.lifespan_context
 
@@ -186,7 +185,7 @@ async def tercon_get_screen_content(
     - session_id: str - Echo of the requested session ID
     - process_running: bool - True if process is still active, False if terminated
     - screen_content: str | None - Current terminal output (None if error)
-    - timestamp: str | None - ISO timestamp when screen content was captured
+    - timestamp: str - ISO timestamp when screen content was captured
     - error: str | None - Error message if operation failed
 
     Use this tool to:
@@ -249,7 +248,7 @@ async def tercon_send_input(
 
     Parameters (SendInputRequest):
     - session_id: str - ID of the session to send input to (from tercon_execute_command or tercon_list_sessions)
-    - input_text: str - Text to send to the process (newline automatically appended)
+    - input_text: str - Text to send to the process (without implicit newline)
 
     Returns SendInputResponse with:
     - success: bool - True if input was sent successfully, False if failed
@@ -308,7 +307,7 @@ async def tercon_execute_command(
 
     Creates a session and executes the specified command. ALL commands (interactive and
     non-interactive) create a persistent session that must be managed by the agent.
-    No output is returned - agents must use get_screen_content to see terminal state.
+    No output is returned - agents must use tercon_get_screen_content to see terminal state.
 
     Parameters (ExecuteCommandRequest):
     - command: str - Command to execute (e.g., 'ssh host', 'python -u script.py', 'ls', 'mysql')
@@ -325,7 +324,7 @@ async def tercon_execute_command(
     IMPORTANT: For interactive programs that buffer output, use unbuffered mode.
     Use flags like: python -u, stdbuf -o0, or program-specific unbuffered options.
 
-    Agent workflow for ALL commands:
+    Agent workflow:
     1. tercon_execute_command - Creates session and starts process
     2. tercon_get_screen_content - Agent sees current terminal state (output or interface)
     3. tercon_send_input - Agent sends input if process is waiting for interaction

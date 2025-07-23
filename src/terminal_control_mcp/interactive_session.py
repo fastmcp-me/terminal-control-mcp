@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import io
 import signal
 
 import pexpect
@@ -36,6 +37,9 @@ class InteractiveSession:
         self.last_command: str | None = None
         self.command_history: list[str] = []
 
+        # Capture output automatically
+        self.output_capture: io.StringIO | None = None
+
         # Interaction logging
         self.interaction_logger = InteractionLogger(session_id)
 
@@ -64,9 +68,6 @@ class InteractiveSession:
 
             # User-provided environment variables override defaults
             env.update(self.environment)
-
-            # Set up automatic output capture for better buffering handling
-            import io
 
             self.output_capture = io.StringIO()
 
@@ -112,7 +113,7 @@ class InteractiveSession:
             self.interaction_logger.log_error("initialization_error", str(e))
             raise RuntimeError(f"Failed to initialize session: {str(e)}") from e
 
-    async def send_input(self, input_text: str, add_newline: bool = True) -> None:
+    async def send_input(self, input_text: str, add_newline: bool = False) -> None:
         """Send input to the session"""
         if not self.is_active or not self.process:
             raise RuntimeError("Session is not active")
@@ -122,6 +123,7 @@ class InteractiveSession:
             await self._execute_input_command(input_text, add_newline)
             self._update_command_history(input_text)
             await self._capture_after_input()
+
         except Exception as e:
             self.interaction_logger.log_error("input_send_error", str(e))
             raise RuntimeError(f"Failed to send input: {str(e)}") from e
@@ -160,6 +162,7 @@ class InteractiveSession:
 
             content = await loop.run_in_executor(None, _read_nonblocking)
             return content
+
         except Exception as e:
             # Log thread pool errors for debugging
             logger = logging.getLogger(__name__)
@@ -197,10 +200,10 @@ class InteractiveSession:
 
         if lines is None:
             return full_output
-        else:
-            # Split by lines and return last N lines
-            output_lines = full_output.split("\n")
-            return "\n".join(output_lines[-lines:])
+
+        # Split by lines and return last N lines
+        output_lines = full_output.split("\n")
+        return "\n".join(output_lines[-lines:])
 
     async def clear_output_buffer(self) -> None:
         """Clear the output buffer"""
