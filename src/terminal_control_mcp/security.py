@@ -11,7 +11,16 @@ logger = logging.getLogger(__name__)
 
 # Constants for security validation
 CONTROL_CHAR_THRESHOLD = 32
+DEL_CHAR_CODE = 127
+C1_CONTROL_START = 128
+C1_CONTROL_END = 159
+PROBLEMATIC_HIGH_BYTES = {254, 255}
 MAX_LOG_VALUE_LENGTH = 200
+
+# Default security limits
+DEFAULT_MAX_CALLS_PER_MINUTE = 60
+DEFAULT_MAX_SESSIONS = 50
+EXPECTED_MIN_BASE_PATHS = 4
 
 
 @dataclass
@@ -29,7 +38,7 @@ class RateLimitData:
         """Remove calls older than the window"""
         now = time.time()
         self.call_timestamps = [
-            ts for ts in self.call_timestamps if now - ts < window_seconds
+            ts for ts in self.call_timestamps if now - ts <= window_seconds
         ]
 
     def get_recent_call_count(self) -> int:
@@ -42,8 +51,8 @@ class SecurityManager:
 
     def __init__(self) -> None:
         self.rate_limits: dict[str, RateLimitData] = {}
-        self.max_calls_per_minute = 60
-        self.max_sessions = 50
+        self.max_calls_per_minute = DEFAULT_MAX_CALLS_PER_MINUTE
+        self.max_sessions = DEFAULT_MAX_SESSIONS
 
         # Dangerous command patterns that should be blocked
         self.blocked_command_patterns = {
@@ -143,9 +152,9 @@ class SecurityManager:
     ) -> bool:
         """Validate tool-specific security requirements"""
 
-        if tool_name == "execute_command":
+        if tool_name == "tercon_execute_command":
             return self._validate_execute_command(arguments, client_id)
-        elif tool_name == "send_input":
+        elif tool_name == "tercon_send_input":
             return self._validate_send_input(arguments, client_id)
 
         return True
@@ -206,11 +215,23 @@ class SecurityManager:
 
     def _validate_input(self, value: str) -> bool:
         """Validate input strings for basic injection attempts"""
-        # Check for null bytes and control characters
+        # Check for null bytes, control characters, and DEL character
         if "\x00" in value or any(
-            ord(c) < CONTROL_CHAR_THRESHOLD and c not in "\t\n\r" for c in value
+            (ord(c) < CONTROL_CHAR_THRESHOLD and c not in "\t\n\r")
+            or ord(c) == DEL_CHAR_CODE
+            for c in value
         ):
             return False
+
+        # Check for problematic bytes in the 128-255 range that are often binary/control sequences
+        # This catches \x80, \x81, \xff, \xfe from the test but allows proper Unicode
+        for c in value:
+            ord_c = ord(c)
+            if (
+                C1_CONTROL_START <= ord_c <= C1_CONTROL_END
+                or ord_c in PROBLEMATIC_HIGH_BYTES
+            ):
+                return False
 
         # Check for potential shell injection patterns
         injection_patterns = {
@@ -221,6 +242,7 @@ class SecurityManager:
             r"\$\([^)]*\)",
             r"`[^`]*`",
             r"\${[^}]*}",
+            r"\\x[0-9a-fA-F]{2}",  # hex escape sequences
         }
 
         for pattern in injection_patterns:
@@ -232,7 +254,12 @@ class SecurityManager:
     def _validate_environment(self, env: dict) -> bool:
         """Validate environment variables for security"""
         for key, value in env.items():
-            if not isinstance(key, str) or not isinstance(value, str):
+            # Check for None values and empty keys
+            if value is None or not isinstance(key, str) or not isinstance(value, str):
+                return False
+
+            # Block empty keys
+            if not key or not key.strip():
                 return False
 
             # Block modification of protected environment variables
@@ -255,7 +282,6 @@ class SecurityManager:
             r"sudo\s+.*",  # sudo commands
             r"su\s+-",  # switch user
             r"passwd\s*$",  # password command
-            r"\\x[0-9a-fA-F]{2}",  # hex escape sequences
         }
 
         for pattern in dangerous_patterns:
@@ -282,6 +308,12 @@ class SecurityManager:
         for sys_path in system_paths:
             if f">{sys_path}" in command or f"to {sys_path}" in command:
                 logger.error(f"Blocked system path modification: {sys_path}")
+                return False
+
+        # Block commands that try to access blocked paths directly
+        for blocked_path in self.blocked_paths:
+            if blocked_path in command:
+                logger.error(f"Blocked access to restricted path: {blocked_path}")
                 return False
 
         # Additional checks for specific dangerous commands

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Interactive Automation MCP Server - FastMCP Implementation
+Terminal Control MCP Server - FastMCP Implementation
 Provides interactive terminal session management for LLM agents
 
 Core tools:
-- execute_command: Execute commands and create sessions
-- get_screen_content: Get current terminal output from sessions
-- send_input: Send input to interactive sessions
-- list_sessions: Show active sessions
-- destroy_session: Clean up sessions
+- tercon_execute_command: Execute commands and create sessions
+- tercon_get_screen_content: Get current terminal output from sessions
+- tercon_send_input: Send input to interactive sessions
+- tercon_list_sessions: Show active sessions
+- tercon_destroy_session: Clean up sessions
 """
 
 import logging
@@ -41,7 +41,7 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler(sys.stderr)],
 )
-logger = logging.getLogger("interactive-automation-mcp")
+logger = logging.getLogger("terminal-control")
 
 
 # Application context and lifecycle management
@@ -58,7 +58,7 @@ class AppContext:
 @asynccontextmanager
 async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
     """Manage application lifecycle with initialized components"""
-    logger.info("Initializing Interactive Automation MCP Server...")
+    logger.info("Initializing Terminal Control MCP Server...")
 
     # Initialize components
     session_manager = SessionManager()
@@ -70,7 +70,7 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
             security_manager=security_manager,
         )
     finally:
-        logger.info("Shutting down Interactive Automation MCP Server...")
+        logger.info("Shutting down Terminal Control MCP Server...")
         # Cleanup all active sessions
         sessions = await session_manager.list_sessions()
         for session_metadata in sessions:
@@ -78,12 +78,12 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
 
 
 # Create FastMCP server with lifespan management
-mcp = FastMCP("Interactive Automation", lifespan=app_lifespan)
+mcp = FastMCP("Terminal Control", lifespan=app_lifespan)
 
 
 # Session Management Tools
 @mcp.tool()
-async def list_sessions(ctx: Context) -> ListSessionsResponse:
+async def tercon_list_sessions(ctx: Context) -> ListSessionsResponse:
     """Show all currently running terminal sessions
 
     Use this when users ask "list my sessions", "what sessions are running", "show active sessions",
@@ -104,7 +104,7 @@ async def list_sessions(ctx: Context) -> ListSessionsResponse:
       - last_activity: float - Unix timestamp of last activity
     - total_sessions: int - Total number of active sessions (max 50 concurrent)
 
-    Use with: get_screen_content, send_input, destroy_session
+    Use with: tercon_get_screen_content, tercon_send_input, tercon_destroy_session
     """
     app_ctx = ctx.request_context.lifespan_context
 
@@ -127,7 +127,7 @@ async def list_sessions(ctx: Context) -> ListSessionsResponse:
 
 
 @mcp.tool()
-async def destroy_session(
+async def tercon_destroy_session(
     request: DestroySessionRequest, ctx: Context
 ) -> DestroySessionResponse:
     """Close and clean up a terminal session
@@ -139,7 +139,7 @@ async def destroy_session(
     Always destroy sessions when automation is complete.
 
     Parameters (DestroySessionRequest):
-    - session_id: str - ID of the session to destroy (from list_sessions or execute_command)
+    - session_id: str - ID of the session to destroy (from tercon_list_sessions or tercon_execute_command)
 
     Returns DestroySessionResponse with:
     - success: bool - True if session was found and destroyed, False if not found
@@ -165,7 +165,7 @@ async def destroy_session(
 
 
 @mcp.tool()
-async def get_screen_content(
+async def tercon_get_screen_content(
     request: GetScreenContentRequest, ctx: Context
 ) -> GetScreenContentResponse:
     """See what's currently displayed in a terminal session
@@ -173,13 +173,13 @@ async def get_screen_content(
     Use this when users ask "what's on screen", "show me the output", "what's currently showing",
     "what do you see", or after starting any command with execute_command.
 
-    ALWAYS use this immediately after execute_command and send_input to see the program output.
+    ALWAYS use this immediately before tercon_send_input to see if the process is ready for input.
 
     Returns the current terminal output visible to the user. This allows the agent
     to see what's currently on screen and decide what to do next.
 
     Parameters (GetScreenContentRequest):
-    - session_id: str - ID of the session to get screen content from (from execute_command or list_sessions)
+    - session_id: str - ID of the session to get screen content from (from tercon_execute_command or tercon_list_sessions)
 
     Returns GetScreenContentResponse with:
     - success: bool - Operation success status
@@ -196,7 +196,7 @@ async def get_screen_content(
     - Debug interactive program behavior
     - Get timing information for agent decision-making
 
-    Use with: execute_command (to get session_id), send_input (when ready for input)
+    Use with: tercon_execute_command (to get session_id), tercon_send_input (when ready for input)
     """
     app_ctx = ctx.request_context.lifespan_context
 
@@ -236,7 +236,9 @@ async def get_screen_content(
 
 
 @mcp.tool()
-async def send_input(request: SendInputRequest, ctx: Context) -> SendInputResponse:
+async def tercon_send_input(
+    request: SendInputRequest, ctx: Context
+) -> SendInputResponse:
     """Type commands or input into an interactive terminal session
 
     Use this when users ask to "type", "send", "enter", "input", "respond", "answer", or "press" something.
@@ -246,7 +248,7 @@ async def send_input(request: SendInputRequest, ctx: Context) -> SendInputRespon
     Use this when the agent determines the process is ready for input.
 
     Parameters (SendInputRequest):
-    - session_id: str - ID of the session to send input to (from execute_command or list_sessions)
+    - session_id: str - ID of the session to send input to (from tercon_execute_command or tercon_list_sessions)
     - input_text: str - Text to send to the process (newline automatically appended)
 
     Returns SendInputResponse with:
@@ -261,11 +263,15 @@ async def send_input(request: SendInputRequest, ctx: Context) -> SendInputRespon
     - Provide input when programs are waiting for user response
     - Send keystrokes to any interactive terminal program
 
-    Use after: get_screen_content (to verify process is ready for input)
-
-    IMPORTANT: Always follow send_input with get_screen_content to show users what happened.
+    IMPORTANT: Always do tercon_get_screen_content before tercon_send_input to check if the process is ready for input.
     """
     app_ctx = ctx.request_context.lifespan_context
+
+    # Security validation
+    if not app_ctx.security_manager.validate_tool_call(
+        "tercon_send_input", request.model_dump()
+    ):
+        raise ValueError("Security violation: Tool call rejected")
 
     session = await app_ctx.session_manager.get_session(request.session_id)
     if not session:
@@ -292,7 +298,7 @@ async def send_input(request: SendInputRequest, ctx: Context) -> SendInputRespon
 
 # Command Execution Tool
 @mcp.tool()
-async def execute_command(
+async def tercon_execute_command(
     request: ExecuteCommandRequest, ctx: Context
 ) -> ExecuteCommandResponse:
     """Start any terminal command or program in a new session
@@ -320,21 +326,19 @@ async def execute_command(
     Use flags like: python -u, stdbuf -o0, or program-specific unbuffered options.
 
     Agent workflow for ALL commands:
-    1. execute_command - Creates session and starts process
-    2. get_screen_content - Agent sees current terminal state (output or interface)
-    3. send_input - Agent sends input if process is waiting for interaction
+    1. tercon_execute_command - Creates session and starts process
+    2. tercon_get_screen_content - Agent sees current terminal state (output or interface)
+    3. tercon_send_input - Agent sends input if process is waiting for interaction
     4. Repeat steps 2-3 as needed (agent controls timing)
-    5. destroy_session - Clean up when finished (required for ALL sessions)
+    5. tercon_destroy_session - Clean up when finished (required for ALL sessions)
 
-    Use with: get_screen_content (required), send_input (if needed), list_sessions, destroy_session (required)
-
-    IMPORTANT: Always follow execute_command with get_screen_content to show users what happened.
+    Use with: tercon_get_screen_content (required), tercon_send_input (if needed), tercon_list_sessions, tercon_destroy_session (required)
     """
     app_ctx = ctx.request_context.lifespan_context
 
     # Security validation
     if not app_ctx.security_manager.validate_tool_call(
-        "execute_command", request.model_dump()
+        "tercon_execute_command", request.model_dump()
     ):
         raise ValueError("Security violation: Tool call rejected")
 

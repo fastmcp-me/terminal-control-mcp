@@ -15,6 +15,7 @@ src/interactive_automation_mcp.egg-info/dependency_links.txt
 src/interactive_automation_mcp.egg-info/entry_points.txt
 src/interactive_automation_mcp.egg-info/requires.txt
 src/interactive_automation_mcp.egg-info/top_level.txt
+tests/test_edge_cases.py
 tests/test_execute_command.py
-tests/test_new_workflow.py
-tests/test_simplified_workflow.py
+tests/test_mcp_integration.py
+tests/test_security_manager.py

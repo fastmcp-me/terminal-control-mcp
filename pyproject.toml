@@ -3,16 +3,16 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "interactive-automation-mcp"
+name = "terminal-control-mcp"
 version = "1.0.0"
-description = "Interactive Automation MCP Server for Claude Code"
+description = "Terminal Control MCP Server for Claude Code"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
     {name = "Your Name", email = "your.email@example.com"},
 ]
-keywords = ["mcp", "automation", "interactive", "claude", "debugging", "ssh", "database"]
+keywords = ["mcp", "terminal", "control", "claude", "debugging", "ssh", "database"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -44,13 +44,13 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/interactive-automation-mcp"
-Documentation = "https://github.com/yourusername/interactive-automation-mcp/blob/main/README.md"
-Repository = "https://github.com/yourusername/interactive-automation-mcp"
-Issues = "https://github.com/yourusername/interactive-automation-mcp/issues"
+Homepage = "https://github.com/wehnsdaefflae/terminal-control-mcp"
+Documentation = "https://github.com/wehnsdaefflae/terminal-control-mcp/blob/main/README.md"
+Repository = "https://github.com/wehnsdaefflae/terminal-control-mcp"
+Issues = "https://github.com/wehnsdaefflae/terminal-control-mcp/issues"
 
 [project.scripts]
-interactive-automation-mcp = "interactive_automation_mcp.main:main_sync"
+terminal-control-mcp = "terminal_control.main:main_sync"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -80,7 +80,7 @@ extend-exclude = '''
 profile = "black"
 multi_line_output = 3
 line_length = 88
-known_first_party = ["interactive_automation_mcp"]
+known_first_party = ["terminal_control"]
 
 [tool.mypy]
 python_version = "3.10"

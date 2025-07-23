@@ -13,15 +13,16 @@ from types import SimpleNamespace
 
 import pytest
 
-# Add project root to Python path
+# Add project root to Python path before any project imports
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.interactive_automation_mcp.security import SecurityManager
-from src.interactive_automation_mcp.session_manager import SessionManager
-
+# Project imports after path modification (ruff: disable E402)
+from src.terminal_control_mcp.security import SecurityManager  # noqa: E402
+from src.terminal_control_mcp.session_manager import SessionManager  # noqa: E402
 
 # === Core Fixtures ===
+
 
 @pytest.fixture(scope="session")
 def event_loop():
@@ -47,8 +48,7 @@ def session_manager():
 def app_context(security_manager, session_manager):
     """Create application context with managers for integration tests"""
     return SimpleNamespace(
-        security_manager=security_manager,
-        session_manager=session_manager
+        security_manager=security_manager, session_manager=session_manager
     )
 
 
@@ -61,6 +61,7 @@ def mock_context(app_context):
 
 
 # === File System Fixtures ===
+
 
 @pytest.fixture
 def temp_dir():
@@ -80,6 +81,7 @@ def mock_audit_log_path(temp_dir):
 
 # === Test Data Fixtures ===
 
+
 @pytest.fixture
 def dangerous_commands():
     """Dangerous commands that should be blocked"""
@@ -87,22 +89,16 @@ def dangerous_commands():
         "rm -rf /",
         "sudo rm -rf /var",
         "dd if=/dev/zero of=/dev/sda",
-        "mkfs.ext4 /dev/sda1", 
+        "mkfs.ext4 /dev/sda1",
         "chmod 777 /etc/passwd",
-        "systemctl stop ssh"
+        "systemctl stop ssh",
     ]
 
 
-@pytest.fixture 
+@pytest.fixture
 def safe_commands():
     """Safe commands that should be allowed"""
-    return [
-        "echo 'hello world'",
-        "ls -la",
-        "python3 --version",
-        "pwd",
-        "date"
-    ]
+    return ["echo 'hello world'", "ls -la", "python3 --version", "pwd", "date"]
 
 
 @pytest.fixture
@@ -118,64 +114,46 @@ def malicious_inputs():
 
 @pytest.fixture
 def safe_inputs():
-    """Safe input patterns"""  
-    return [
-        "hello world",
-        "user@example.com", 
-        "normal text with 123"
-    ]
+    """Safe input patterns"""
+    return ["hello world", "user@example.com", "normal text with 123"]
 
 
 @pytest.fixture
 def blocked_paths():
     """Paths that should be blocked"""
-    return [
-        "/etc/passwd",
-        "/etc/shadow",
-        "/boot/grub.cfg",
-        "../../../etc/passwd"
-    ]
+    return ["/etc/passwd", "/etc/shadow", "/boot/grub.cfg", "../../../etc/passwd"]
 
 
 @pytest.fixture
 def safe_paths(temp_dir):
     """Paths that should be allowed"""
-    return [
-        "/tmp/test.txt",
-        f"{temp_dir}/safe_file.txt",
-        "/var/tmp/upload.log"
-    ]
+    return ["/tmp/test.txt", f"{temp_dir}/safe_file.txt", "/var/tmp/upload.log"]
 
 
 @pytest.fixture
 def sample_environment_vars():
     """Sample environment variables for testing"""
     return {
-        "safe": {
-            "CUSTOM_VAR": "value",
-            "DEBUG": "true"
-        },
-        "dangerous": {
-            "PATH": "/malicious/path",
-            "LD_PRELOAD": "/malicious/lib.so"
-        }
+        "safe": {"CUSTOM_VAR": "value", "DEBUG": "true"},
+        "dangerous": {"PATH": "/malicious/path", "LD_PRELOAD": "/malicious/lib.so"},
     }
 
 
 # === Test Environment Setup ===
+
 
 @pytest.fixture(scope="session", autouse=True)
 def configure_logging():
     """Configure logging for tests"""
     log_dir = PROJECT_ROOT / "logs"
     log_dir.mkdir(exist_ok=True)
-    
+
     logging.basicConfig(
         level=logging.WARNING,  # Reduce noise during tests
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[
             logging.FileHandler(log_dir / "test.log"),
-        ]
+        ],
     )
 
 
@@ -183,15 +161,15 @@ def configure_logging():
 def clean_environment():
     """Clean environment variables before each test"""
     original_env = os.environ.copy()
-    
+
     # Remove test-related environment variables
     test_vars = [key for key in os.environ if key.startswith("MCP_")]
     for var in test_vars:
         if var in os.environ:
             del os.environ[var]
-    
+
     yield
-    
+
     # Restore original environment
     os.environ.clear()
     os.environ.update(original_env)

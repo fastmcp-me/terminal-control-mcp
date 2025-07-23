@@ -1,6 +1,6 @@
-# Interactive Automation MCP Server
+# Terminal Control MCP Server
 
-A modern FastMCP-based server that enables Claude Code to control ANY terminal programs through agent-directed automation. Built with the latest MCP Python SDK 1.12.0, this server provides intelligent terminal session management for all types of commands - from simple utilities like `ls` and `git status` to complex interactive programs like SSH sessions, database connections, interactive installers, and debugging workflows.
+A modern FastMCP-based server that enables Claude Code to control terminal programs through agent-directed interaction. Built with the latest MCP Python SDK 1.12.0, this server provides intelligent terminal session management for all types of commands - from simple utilities like `ls` and `git status` to complex interactive programs like SSH sessions, database connections, interactive installers, and debugging workflows.
 
 ## ✨ Features
 
@@ -11,11 +11,11 @@ A modern FastMCP-based server that enables Claude Code to control ANY terminal p
 - **🎯 Automatic Schema Generation**: JSON schemas generated from Python type hints
 - **🔄 Lifespan Management**: Proper startup/shutdown with resource cleanup
 
-### 🚀 **Agent-Controlled Terminal Automation**
+### 🚀 **Agent-Controlled Terminal Interaction**
 - **🎯 Agent-Controlled Interaction**: Agents have full control over timing and interaction flow
-- **📊 Session Management**: Maintain persistent sessions with automatic cleanup
+- **📊 Session Management**: Maintain persistent sessions with manual cleanup
 - **🔍 Real-time Screen Content**: Get current terminal output with timestamps
-- **🛡️ Simplified Design**: No complex automation patterns - agents decide when to act
+- **🛡️ Simple Design**: No complex automation patterns - agents decide when to act
 - **🐛 Universal Terminal Support**: Control ANY terminal program (interactive and non-interactive)
 - **🔒 User-Controlled Security**: Maximum flexibility with user responsibility
 
@@ -59,13 +59,13 @@ Once installed, configure the MCP server in your AI assistant:
 2. **Add the MCP server using Claude Code CLI**:
    ```bash
    # Recommended: User scope (available across all projects)
-   claude mcp add interactive-automation -s user interactive-automation-mcp
+   claude mcp add terminal-control -s user terminal-control-mcp
 
    # Alternative: Local scope (default - current project only)
-   claude mcp add interactive-automation interactive-automation-mcp
+   claude mcp add terminal-control terminal-control-mcp
 
    # Alternative: Project scope (shared via .mcp.json in version control)
-   claude mcp add interactive-automation -s project interactive-automation-mcp
+   claude mcp add terminal-control -s project terminal-control-mcp
    ```
 
 3. **Verify the server was added**:
@@ -85,9 +85,9 @@ Once installed, configure the MCP server in your AI assistant:
    {
      "mcp.servers": {
        "interactive-automation": {
-         "command": "/path/to/interactive-automation-mcp/.venv/bin/python",
-         "args": ["-m", "interactive_automation_mcp.main"],
-         "cwd": "/path/to/interactive-automation-mcp"
+         "command": "/path/to/terminal-control-mcp/.venv/bin/python",
+         "args": ["-m", "terminal_control_mcp.main"],
+         "cwd": "/path/to/terminal-control-mcp"
        }
      }
    }
@@ -98,8 +98,8 @@ Once installed, configure the MCP server in your AI assistant:
    {
      "mcp.servers": {
        "interactive-automation": {
-         "command": "/path/to/interactive-automation-mcp/.venv/bin/interactive-automation-mcp",
-         "cwd": "/path/to/interactive-automation-mcp"
+         "command": "/path/to/terminal-control-mcp/.venv/bin/terminal-control-mcp",
+         "cwd": "/path/to/terminal-control-mcp"
        }
      }
    }
@@ -111,7 +111,7 @@ Once installed, configure the MCP server in your AI assistant:
 
 ### 📋 Session Management (2 tools)
 
-#### **`list_sessions`**
+#### **`tercon_list_sessions`**
 List all active terminal sessions with detailed status information.
 
 Shows comprehensive session information:
@@ -120,12 +120,12 @@ Shows comprehensive session information:
 - Creation timestamps and last activity times
 - Total session count (max 50 concurrent)
 
-#### **`destroy_session`**
+#### **`tercon_destroy_session`**
 Terminate and cleanup a terminal session safely.
 
 ### 🤖 Agent-Controlled Interaction (2 tools)
 
-#### **`get_screen_content`**
+#### **`tercon_get_screen_content`**
 Get current terminal screen content with timestamp.
 
 **Key features:**
@@ -135,12 +135,12 @@ Get current terminal screen content with timestamp.
 - Agents decide when to wait longer based on timestamps
 
 **Agent workflow:**
-1. Call `get_screen_content` to see current terminal state
+1. Call `tercon_get_screen_content` to see current terminal state
 2. Analyze screen content and timestamp
 3. Decide whether to wait longer or take action
-4. Use `send_input` when process is ready for input
+4. Use `tercon_send_input` when process is ready for input
 
-#### **`send_input`**
+#### **`tercon_send_input`**
 Send text input to a terminal session.
 
 **Features:**
@@ -151,7 +151,7 @@ Send text input to a terminal session.
 
 ### 🔗 Session Creation (1 tool)
 
-#### **`execute_command`**
+#### **`tercon_execute_command`**
 Execute any command and create a terminal session.
 
 **Universal command execution:**
@@ -159,15 +159,15 @@ Execute any command and create a terminal session.
 - ALL commands create persistent sessions (interactive and non-interactive)
 - Process startup timeout only (default: 30 seconds)
 - Environment variables and working directory control
-- NO output returned - agents must use `get_screen_content` to see terminal state
+- NO output returned - agents must use `tercon_get_screen_content` to see terminal state
 - Returns session ID for agent-controlled interaction
 
-**Agent-controlled workflow for ALL commands:**
-1. `execute_command` - Creates session and starts process
-2. `get_screen_content` - Agent sees current terminal state (output or interface) with timestamp
-3. `send_input` - Agent sends input if process is waiting for interaction
+**Agent-controlled workflow:**
+1. `tercon_execute_command` - Creates session and starts process
+2. `tercon_get_screen_content` - Agent sees current terminal state (output or interface) with timestamp
+3. `tercon_send_input` - Agent sends input if process is waiting for interaction
 4. Repeat steps 2-3 as needed (agent controls timing)
-5. `destroy_session` - Clean up when finished (REQUIRED for all sessions)
+5. `tercon_destroy_session` - Clean up when finished (REQUIRED for all sessions)
 
 ## 📚 Usage Examples & Tutorial
 
@@ -187,8 +187,8 @@ claude mcp add interactive-automation -s user interactive-automation-mcp
 # Verify installation
 claude mcp list
 
-# Test basic functionality
-python tests/test_simplified_workflow.py
+# Test
+python tests/conftest.py
 ```
 
 ### Essential Tool Examples
@@ -315,13 +315,13 @@ Claude terminates the debugger and cleans up the session.
 - Ensure working directory is correct
 
 **Process Not Responding**:
-- Use `get_screen_content` to see current state
+- Use `tercon_get_screen_content` to see current state
 - Check timestamps to see if output is recent
 - Look for blocking prompts requiring input
 
 **Session Becomes Unresponsive**:
-- Use `list_sessions` to check session state
-- Use `destroy_session` to clean up and start fresh
+- Use `tercon_list_sessions` to check session state
+- Use `tercon_destroy_session` to clean up and start fresh
 - Check for programs waiting for input
 
 #### Debug Mode
@@ -336,8 +336,7 @@ claude code
 
 ```bash
 # Run functionality tests
-python tests/test_simplified_workflow.py
-python tests/test_execute_command.py
+python tests/conftest.py
 
 # Install with development dependencies
 pip install -e ".[dev]"
@@ -402,8 +401,8 @@ pytest tests/
 ## 🔒 Security
 
 **Agent-Controlled Design Philosophy**: Maximum flexibility with user responsibility
-- **No command filtering** - All commands allowed (agents control what runs)
-- **No path restrictions** - All paths accessible (user controls access)  
+- **Command filtering** - Only allows secure commands (e.g., no `rm -rf /`)
+- **Path restrictions** - Commands run in user-specified directories, preventing unauthorized access
 - **All commands create sessions** - Both interactive and non-interactive commands create persistent sessions
 - **Agent-controlled output** - No direct output from execute_command, agents use get_screen_content
 - **Rate limiting** - 60 calls per minute to prevent abuse
@@ -414,30 +413,11 @@ pytest tests/
 ## 📁 Project Structure
 
 ```
-interactive-automation-mcp/
-├── pyproject.toml              # Modern Python project configuration
-├── README.md                   # This comprehensive guide
-├── CLAUDE.md                   # Development and technical documentation
-├── src/
-│   └── interactive_automation_mcp/
-│       ├── __init__.py        # Package initialization
-│       ├── main.py            # Main MCP server entry point (FastMCP)
-│       ├── session_manager.py # Session lifecycle management
-│       ├── interactive_session.py # Terminal session handling
-│       ├── security.py        # Security controls and validation
-│       ├── models.py          # Pydantic models for type safety
-│       ├── interaction_logger.py # Comprehensive logging
-│       └── utils.py           # Utility functions
-├── tests/                      # Comprehensive test suite
-│   ├── test_simplified_workflow.py # Main functionality tests
-│   ├── test_execute_command.py     # Command execution tests
-│   └── test_new_workflow.py        # Workflow validation tests
-└── docs/                       # Documentation
+[UPDATE THIS!]
 ```
 
 ## 🚀 Development Status
 
-- ✅ **Production Ready** - All 5 agent-controlled tools implemented and tested
 - ✅ **FastMCP Architecture** - Modern MCP Python SDK 1.12.0 implementation
 - ✅ **Agent-Controlled Design** - Simplified architecture with agent timing control
 - ✅ **Type Safety** - Full Pydantic model validation and mypy type coverage
@@ -446,15 +426,6 @@ interactive-automation-mcp/
 - ✅ **Clean Architecture** - Well-organized, maintainable code with modern tooling
 - ✅ **Universal Terminal Support** - Works with ANY terminal program
 - ✅ **Code Quality** - All linting (ruff) and type checking (mypy) passes
-
-## 🔄 Architecture Changes
-
-**Major Simplification (2025)**: Transitioned from complex automation patterns to agent-controlled interaction:
-- **Removed**: Complex expect/respond automation engine
-- **Added**: Agent timing control with timestamped screen content
-- **Simplified**: Only process startup timeouts - agents control interaction timing
-- **Enhanced**: Real-time screen content access with timestamps
-- **Result**: Cleaner, more reliable, agent-directed terminal automation
 
 ## 📄 License
 
