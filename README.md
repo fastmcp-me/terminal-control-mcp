@@ -15,6 +15,7 @@ A modern FastMCP-based server that enables Claude Code to control terminal progr
 - **🎯 Agent-Controlled Interaction**: Agents have full control over timing and interaction flow
 - **📊 Session Management**: Maintain persistent sessions with manual cleanup
 - **🔍 Real-time Screen Content**: Get current terminal output with timestamps
+- **🌐 Web Interface**: Direct browser access to terminal sessions for manual interaction
 - **🛡️ Simple Design**: No complex automation patterns - agents decide when to act
 - **🐛 Universal Terminal Support**: Control ANY terminal program (interactive and non-interactive)
 - **🔒 User-Controlled Security**: Maximum flexibility with user responsibility
@@ -75,6 +76,8 @@ Once installed, configure the MCP server in your AI assistant:
 
 **Note**: The MCP server will be automatically launched by Claude Code when needed - no manual activation required.
 
+**Web Interface**: When the server starts, it automatically launches a web interface (default port 8080) where users can directly view and interact with terminal sessions through their browser. The interface is automatically configured for local or remote access based on your environment settings.
+
 ### 🔧 Visual Studio Code with GitHub Copilot
 
 1. **Configure in VS Code settings** (MCP extension or built-in support):
@@ -107,6 +110,45 @@ Once installed, configure the MCP server in your AI assistant:
 
 3. **Reload VS Code** to apply the configuration
 
+## 🌐 Web Interface
+
+Each terminal session is accessible through a web interface that provides:
+
+### ✨ **Real-Time Terminal Access**
+- **Live terminal output** - See exactly what agents see in real-time
+- **Manual input capability** - Send commands directly to sessions without going through the agent
+- **WebSocket updates** - Automatic screen refreshes as output changes
+- **Session management** - View all active sessions and their status
+
+### 🔗 **Session URLs**
+- **Individual session pages**: `http://localhost:8080/session/{session_id}`
+- **Session overview**: `http://localhost:8080/` (lists all active sessions)
+- **Direct browser access** - No additional software needed
+- **Transparent to agents** - Agents remain unaware of direct user interaction
+
+### ⚙️ **Configuration**
+
+#### Local Development
+```bash
+# Default configuration - web interface only accessible locally
+export TERMINAL_CONTROL_WEB_HOST=127.0.0.1   # Default: 0.0.0.0 (changed for security)
+export TERMINAL_CONTROL_WEB_PORT=8080        # Default: 8080
+```
+
+#### Remote/Network Access
+```bash
+# For MCP servers running on remote machines
+export TERMINAL_CONTROL_WEB_HOST=0.0.0.0            # Bind to all interfaces
+export TERMINAL_CONTROL_WEB_PORT=8080               # Choose available port
+export TERMINAL_CONTROL_EXTERNAL_HOST=your-server.com  # External hostname/IP for URLs
+```
+
+**Remote Access Example:**
+- MCP server runs on `server.example.com`
+- Set `TERMINAL_CONTROL_EXTERNAL_HOST=server.example.com`
+- Users access sessions at `http://server.example.com:8080/session/{session_id}`
+- Agent logs show the correct external URLs for sharing
+
 ## 🛠️ Complete Tool Set (5 Agent-Controlled Tools)
 
 ### 📋 Session Management (2 tools)
@@ -119,6 +161,7 @@ Shows comprehensive session information:
 - Session states (active, waiting, error, terminated)
 - Creation timestamps and last activity times
 - Total session count (max 50 concurrent)
+- **Web interface URLs** logged for user access
 
 #### **`tercon_destroy_session`**
 Terminate and cleanup a terminal session safely.
@@ -140,6 +183,8 @@ Get current terminal screen content with timestamp.
 3. Decide whether to wait longer or take action
 4. Use `tercon_send_input` when process is ready for input
 
+**User access**: Same content visible in web interface for direct interaction
+
 #### **`tercon_send_input`**
 Send text input to a terminal session.
 
@@ -148,6 +193,7 @@ Send text input to a terminal session.
 - Automatic newline appending
 - No timeouts - agents control timing
 - Works with any terminal program
+- **Parallel user input** possible through web interface
 
 ### 🔗 Session Creation (1 tool)
 
@@ -161,6 +207,7 @@ Execute any command and create a terminal session.
 - Environment variables and working directory control
 - NO output returned - agents must use `tercon_get_screen_content` to see terminal state
 - Returns session ID for agent-controlled interaction
+- **Web interface URL** logged for direct user access
 
 **Agent-controlled workflow:**
 1. `tercon_execute_command` - Creates session and starts process
@@ -201,6 +248,9 @@ python tests/conftest.py
 "What's currently showing in the terminal?"
 "Type 'print(2+2)' in the Python session"
 "Close that debugging session for me"
+
+# Claude will provide web interface URLs for direct access:
+# "Session created! You can also access it directly at http://localhost:8080/session/session_abc123"
 ```
 
 #### Interactive Programs
@@ -222,6 +272,26 @@ python tests/conftest.py
 "Install this software and handle any prompts that come up"
 ```
 
+### 🌐 Web Interface Usage Examples
+
+#### Direct Terminal Access
+```bash
+# After creating a session with Claude:
+1. Claude: "I've started a Python debugger session. You can also access it directly at http://localhost:8080/session/session_abc123"
+2. User opens the URL in browser
+3. User sees live terminal output and can type commands directly
+4. Both agent and user can interact with the same session simultaneously
+```
+
+#### Monitoring Long-Running Processes
+```bash
+# For monitoring builds, deployments, or long-running scripts:
+1. Agent starts process: "Starting your build process..."
+2. User opens web interface to monitor progress in real-time
+3. User can send manual commands if needed (like stopping the process)
+4. Agent continues to monitor and respond as needed
+```
+
 ### 🐛 Complete Debugging Tutorial with `examples/example_debug.py`
 
 This walkthrough shows how to debug a real Python script using natural language with Claude.
@@ -237,6 +307,8 @@ Claude will start the Python debugger and show you:
 -> print("Starting calculations...")
 (Pdb) 
 ```
+
+**Pro tip**: Claude will also provide a web interface URL where you can view the same debugger session in your browser and send commands directly if needed.
 
 #### Exploring the Code
 ```

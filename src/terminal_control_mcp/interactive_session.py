@@ -1,10 +1,11 @@
 import asyncio
+import io
 import logging
 import os
-import io
 import signal
 
 import pexpect
+from rich.text import Text
 
 from .interaction_logger import InteractionLogger
 from .utils import wrap_command
@@ -169,6 +170,71 @@ class InteractiveSession:
             logger.debug(f"Thread pool error reading screen content: {e}")
             return ""
 
+    def _clean_terminal_output(self, raw_output: str) -> str:
+        """Clean ANSI sequences and normalize terminal output"""
+        # Clean ANSI escape sequences from output for both web and MCP interfaces
+        clean_output = Text.from_ansi(raw_output).plain
+
+        # Additional cleanup for artifacts that rich might miss
+        clean_output = (
+            clean_output
+            .replace("0;", "")  # Remove window title sequence remnants
+            .replace("\r\n", "\n")  # Normalize line endings
+            .replace("\r", "\n")  # Convert remaining \r to \n
+        )
+
+        # Clean up excessive blank lines (but preserve intentional spacing)
+        output_lines = clean_output.split("\n")
+        cleaned_lines = []
+        prev_blank = False
+
+        for line in output_lines:
+            is_blank = not line.strip()
+            # Skip consecutive blank lines, but keep single blank lines
+            if is_blank and prev_blank:
+                continue
+            cleaned_lines.append(line)
+            prev_blank = is_blank
+
+        return "\n".join(cleaned_lines)
+
+    async def get_raw_output(self, lines: int | None = None) -> str:
+        """Get raw output with ANSI sequences intact (for xterm.js)"""
+        # Priority: automatic capture > current screen content > manual buffer
+        
+        # First try automatic capture (most reliable for both interactive and non-interactive)
+        if hasattr(self, "output_capture") and self.output_capture:
+            captured = self.output_capture.getvalue()
+            if captured and captured.strip():
+                full_output = captured
+            else:
+                # Fallback to current screen content
+                current_content = await self.get_current_screen_content()
+                if current_content and current_content.strip():
+                    full_output = current_content
+                else:
+                    # Final fallback to manual buffer
+                    full_output = (
+                        "\n".join(self.output_buffer) if self.output_buffer else ""
+                    )
+        else:
+            # No automatic capture, try current screen content then manual buffer
+            current_content = await self.get_current_screen_content()
+            if current_content and current_content.strip():
+                full_output = current_content
+            else:
+                full_output = (
+                    "\n".join(self.output_buffer) if self.output_buffer else ""
+                )
+
+        # Return raw output without cleaning ANSI sequences
+        if lines is None:
+            return full_output
+
+        # Split by lines and return last N lines
+        output_lines = full_output.split("\n")
+        return "\n".join(output_lines[-lines:])
+
     async def get_output(self, lines: int | None = None) -> str:
         """Get output from the automatic capture, prioritizing most recent content"""
         # Priority: automatic capture > current screen content > manual buffer
@@ -198,12 +264,14 @@ class InteractiveSession:
                     "\n".join(self.output_buffer) if self.output_buffer else ""
                 )
 
+        clean_output = self._clean_terminal_output(full_output)
+
         if lines is None:
-            return full_output
+            return clean_output
 
         # Split by lines and return last N lines
-        output_lines = full_output.split("\n")
-        return "\n".join(output_lines[-lines:])
+        final_lines = clean_output.split("\n")
+        return "\n".join(final_lines[-lines:])
 
     async def clear_output_buffer(self) -> None:
         """Clear the output buffer"""

@@ -132,3 +132,6 @@ class ExecuteCommandResponse(BaseModel):
     success: bool
     session_id: str
     command: str
+    web_url: str | None = Field(
+        None, description="Web interface URL for direct browser access to this session"
+    )

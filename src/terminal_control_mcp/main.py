@@ -11,12 +11,14 @@ Core tools:
 - tercon_destroy_session: Clean up sessions
 """
 
+import asyncio
 import logging
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
 
@@ -34,6 +36,26 @@ from .models import (
 )
 from .security import SecurityManager
 from .session_manager import SessionManager
+
+# Import web server components optionally to support testing without web dependencies
+try:
+    from .web_server import WebServer, get_external_web_host, get_web_host, get_web_port
+
+    WEB_INTERFACE_AVAILABLE = True
+except ImportError:
+    # Fallback for testing environments without web dependencies
+    WebServer = None  # type: ignore
+    WEB_INTERFACE_AVAILABLE = False
+
+    def get_web_host() -> str:
+        return "127.0.0.1"
+
+    def get_web_port() -> int:
+        return 8080
+
+    def get_external_web_host() -> Any:  # type: ignore
+        return None
+
 
 # Configure logging
 logging.basicConfig(
@@ -53,6 +75,39 @@ class AppContext:
 
     session_manager: SessionManager
     security_manager: SecurityManager
+    web_server: WebServer | None = None
+
+
+async def _initialize_web_server(
+    session_manager: SessionManager,
+) -> tuple[WebServer | None, asyncio.Task[None] | None]:
+    """Initialize web server if available"""
+    if not WEB_INTERFACE_AVAILABLE or WebServer is None:
+        logger.info("Web interface not available (missing dependencies or disabled)")
+        return None, None
+
+    web_port = get_web_port()
+    web_server = WebServer(session_manager, port=web_port)
+    web_task = asyncio.create_task(web_server.start())
+    logger.info(f"Web interface available at http://{get_web_host()}:{web_port}")
+    return web_server, web_task
+
+
+async def _cleanup_web_server(web_task: asyncio.Task[None] | None) -> None:
+    """Clean up web server task"""
+    if web_task is not None:
+        web_task.cancel()
+        try:
+            await web_task
+        except asyncio.CancelledError:
+            pass
+
+
+async def _cleanup_sessions(session_manager: SessionManager) -> None:
+    """Clean up all active sessions"""
+    sessions = await session_manager.list_sessions()
+    for session_metadata in sessions:
+        await session_manager.destroy_session(session_metadata.session_id)
 
 
 @asynccontextmanager
@@ -63,18 +118,37 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
     # Initialize components
     session_manager = SessionManager()
     security_manager = SecurityManager()
+    web_server, web_task = await _initialize_web_server(session_manager)
 
     try:
         yield AppContext(
             session_manager=session_manager,
             security_manager=security_manager,
+            web_server=web_server,
         )
     finally:
         logger.info("Shutting down Terminal Control MCP Server...")
-        # Cleanup all active sessions
-        sessions = await session_manager.list_sessions()
-        for session_metadata in sessions:
-            await session_manager.destroy_session(session_metadata.session_id)
+        await _cleanup_web_server(web_task)
+        await _cleanup_sessions(session_manager)
+
+
+def _get_display_web_host() -> str:
+    """Get the web host for display in URLs (handles 0.0.0.0 binding)"""
+    external_host = get_external_web_host()
+    web_host = external_host or get_web_host()
+
+    # If binding to 0.0.0.0, provide a more user-friendly URL
+    if web_host == "0.0.0.0":
+        import socket
+
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.connect(("8.8.8.8", 80))
+                web_host = s.getsockname()[0]
+        except Exception:
+            web_host = "localhost"
+
+    return web_host
 
 
 # Create FastMCP server with lifespan management
@@ -104,6 +178,11 @@ async def tercon_list_sessions(ctx: Context) -> ListSessionsResponse:
       - last_activity: float - Unix timestamp of last activity
     - total_sessions: int - Total number of active sessions (max 50 concurrent)
 
+    Web interface URLs for each session are logged and can be shared with users for direct
+    browser access to view terminal output and send manual input. The URLs are automatically
+    configured based on the server's network settings and can be customized via environment
+    variables for remote access.
+
     Use with: tercon_get_screen_content, tercon_send_input, tercon_destroy_session
     """
     app_ctx = ctx.request_context.lifespan_context
@@ -121,9 +200,24 @@ async def tercon_list_sessions(ctx: Context) -> ListSessionsResponse:
         for session in sessions
     ]
 
-    return ListSessionsResponse(
+    # Add web interface information to the response
+    response = ListSessionsResponse(
         success=True, sessions=session_list, total_sessions=len(session_list)
     )
+
+    # Add web URLs for user access (agent can share these with users)
+    if session_list and WEB_INTERFACE_AVAILABLE:
+        web_host = _get_display_web_host()
+        web_port = get_web_port()
+
+        logger.info(
+            f"Sessions available via web interface at http://{web_host}:{web_port}/"
+        )
+        for session in session_list:
+            session_url = f"http://{web_host}:{web_port}/session/{session.session_id}"
+            logger.info(f"Session {session.session_id}: {session_url}")
+
+    return response
 
 
 @mcp.tool()
@@ -188,6 +282,10 @@ async def tercon_get_screen_content(
     - timestamp: str - ISO timestamp when screen content was captured
     - error: str | None - Error message if operation failed
 
+    The session's web interface URL is logged for user access to view the same content
+    in their browser and send manual input. The URL adapts to the server's network
+    configuration for both local and remote access scenarios.
+
     Use this tool to:
     - Check what's currently displayed in the terminal
     - See if a process is waiting for input
@@ -210,9 +308,24 @@ async def tercon_get_screen_content(
         )
 
     try:
-        screen_content = await session.get_output()
+        # Use xterm.js buffer as source of truth if web server is available
+        if app_ctx.web_server and app_ctx.web_server.is_xterm_active(
+            request.session_id
+        ):
+            screen_content = await app_ctx.web_server.mcp_get_screen_content(
+                request.session_id
+            )
+        else:
+            screen_content = await session.get_output()
         process_running = session.is_process_alive()
         timestamp = datetime.now().isoformat()
+
+        # Log web interface URL for user access if available
+        if WEB_INTERFACE_AVAILABLE:
+            web_host = _get_display_web_host()
+            web_port = get_web_port()
+            session_url = f"http://{web_host}:{web_port}/session/{request.session_id}"
+            logger.info(f"Session {request.session_id} web interface: {session_url}")
 
         return GetScreenContentResponse(
             success=True,
@@ -279,7 +392,18 @@ async def tercon_send_input(
         )
 
     try:
-        await session.send_input(request.input_text)
+        # Use xterm.js input queue if web server is available
+        if app_ctx.web_server and app_ctx.web_server.is_xterm_active(
+            request.session_id
+        ):
+            queue_success = await app_ctx.web_server.mcp_send_input(
+                request.session_id, request.input_text
+            )
+            if not queue_success:
+                # Fallback to direct session input if xterm queue fails
+                await session.send_input(request.input_text)
+        else:
+            await session.send_input(request.input_text)
         return SendInputResponse(
             success=True,
             session_id=request.session_id,
@@ -305,9 +429,8 @@ async def tercon_execute_command(
     Use this when users ask to "start", "run", "launch", "execute", "debug", "connect to", or "open" any program.
     Examples: "start Python", "debug this script", "connect to SSH", "run mysql client", "launch git status".
 
-    Creates a session and executes the specified command. ALL commands (interactive and
-    non-interactive) create a persistent session that must be managed by the agent.
-    No output is returned - agents must use tercon_get_screen_content to see terminal state.
+    Creates a session and executes the specified command. Commands create a persistent session that must be managed by
+    the agent. No output is returned - agents must use tercon_get_screen_content to see terminal state.
 
     Parameters (ExecuteCommandRequest):
     - command: str - Command to execute (e.g., 'ssh host', 'python -u script.py', 'ls', 'mysql')
@@ -320,6 +443,11 @@ async def tercon_execute_command(
     - success: bool - True if session was created and command started, False if failed
     - session_id: str - Unique session identifier for use with other tools
     - command: str - Full command that was executed (including args)
+    - web_url: str | None - URL for web interface to view session output (if available)
+    - error: str | None - Error message if operation failed (None on success)
+
+    The session's web interface URL can be shared with users for direct browser access to view terminal
+    output and send manual input.
 
     IMPORTANT: For interactive programs that buffer output, use unbuffered mode.
     Use flags like: python -u, stdbuf -o0, or program-specific unbuffered options.
@@ -356,10 +484,19 @@ async def tercon_execute_command(
             working_directory=request.working_directory,
         )
 
+        # Get web interface URL for this session if available
+        web_url = None
+        if WEB_INTERFACE_AVAILABLE:
+            web_host = _get_display_web_host()
+            web_port = get_web_port()
+            web_url = f"http://{web_host}:{web_port}/session/{session_id}"
+            logger.info(f"Session {session_id} created. Web interface: {web_url}")
+
         return ExecuteCommandResponse(
             success=True,
             session_id=session_id,
             command=full_command,
+            web_url=web_url,
         )
 
     except Exception as e:
@@ -370,6 +507,7 @@ async def tercon_execute_command(
             success=False,
             session_id="",
             command=full_command,
+            web_url=None,
         )
 
 
