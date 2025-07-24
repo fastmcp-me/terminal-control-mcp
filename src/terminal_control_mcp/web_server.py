@@ -53,6 +53,10 @@ class WebServer:
         self.input_queues: dict[str, asyncio.Queue] = (
             {}
         )  # session_id -> input_queue for MCP tools
+        # Track last sent output position for incremental updates
+        self.last_sent_positions: dict[str, int] = (
+            {}
+        )  # session_id -> last_sent_char_position
 
         # Setup templates and static files
         self._setup_templates_and_static()
@@ -262,8 +266,9 @@ class WebServer:
         if session_id not in self.input_queues:
             self.input_queues[session_id] = asyncio.Queue()
 
-        # Initialize terminal buffer
+        # Initialize terminal buffer and position tracking
         self.terminal_buffers[session_id] = ""
+        self.last_sent_positions[session_id] = 0
 
         try:
             # Send initial raw screen content to xterm.js (with ANSI sequences)
@@ -272,6 +277,8 @@ class WebServer:
                 await websocket.send_text(initial_content)
                 self.terminal_buffers[session_id] = initial_content
                 self.xterm_terminals[session_id]["buffer"] = initial_content
+                # Initialize position tracking
+                self.last_sent_positions[session_id] = len(initial_content)
 
             # Start background task to handle MCP tool input
             mcp_input_task = asyncio.create_task(
@@ -291,14 +298,15 @@ class WebServer:
                         input_data = data["data"]
                         await session.send_input(input_data)
 
-                        # Get and send back the raw output (with ANSI sequences)
+                        # Get and send back only the new output (incremental)
                         await asyncio.sleep(0.1)  # Brief delay for output
-                        output = await session.get_raw_output()
-                        if output:
-                            await websocket.send_text(output)
-                            # Update buffer for MCP tools
-                            self.terminal_buffers[session_id] = output
-                            self.xterm_terminals[session_id]["buffer"] = output
+                        new_output = await self._get_incremental_output(session_id, session)
+                        if new_output:
+                            await websocket.send_text(new_output)
+                            # Update buffer for MCP tools with full content
+                            full_output = await session.get_raw_output()
+                            self.terminal_buffers[session_id] = full_output
+                            self.xterm_terminals[session_id]["buffer"] = full_output
                             self.xterm_terminals[session_id][
                                 "last_update"
                             ] = asyncio.get_event_loop().time()
@@ -319,16 +327,14 @@ class WebServer:
                         )
 
                 except asyncio.TimeoutError:
-                    # Periodically check for new output and send to xterm.js
-                    current_content = await session.get_raw_output()
-                    if (
-                        current_content
-                        and current_content != self.terminal_buffers.get(session_id, "")
-                    ):
-                        await websocket.send_text(current_content)
-                        # Update buffer for MCP tools
-                        self.terminal_buffers[session_id] = current_content
-                        self.xterm_terminals[session_id]["buffer"] = current_content
+                    # Periodically check for new output and send only incremental updates
+                    new_output = await self._get_incremental_output(session_id, session)
+                    if new_output:
+                        await websocket.send_text(new_output)
+                        # Update buffer for MCP tools with full content
+                        full_output = await session.get_raw_output()
+                        self.terminal_buffers[session_id] = full_output
+                        self.xterm_terminals[session_id]["buffer"] = full_output
                         self.xterm_terminals[session_id][
                             "last_update"
                         ] = asyncio.get_event_loop().time()
@@ -346,6 +352,8 @@ class WebServer:
                 del self.terminal_buffers[session_id]
             if session_id in self.input_queues:
                 del self.input_queues[session_id]
+            if session_id in self.last_sent_positions:
+                del self.last_sent_positions[session_id]
             try:
                 await websocket.close()
             except Exception:
@@ -365,22 +373,23 @@ class WebServer:
                 # Send to the underlying terminal session
                 await session.send_input(input_data)
 
-                # Get output and update buffer
+                # Get incremental output and update buffer
                 await asyncio.sleep(0.1)  # Brief delay for output
-                output = await session.get_raw_output()
-                if output:
-                    # Update buffer for MCP tools
-                    self.terminal_buffers[session_id] = output
+                new_output = await self._get_incremental_output(session_id, session)
+                if new_output:
+                    # Update buffer for MCP tools with full content
+                    full_output = await session.get_raw_output()
+                    self.terminal_buffers[session_id] = full_output
                     if session_id in self.xterm_terminals:
-                        self.xterm_terminals[session_id]["buffer"] = output
+                        self.xterm_terminals[session_id]["buffer"] = full_output
                         self.xterm_terminals[session_id][
                             "last_update"
                         ] = asyncio.get_event_loop().time()
 
-                        # Send to xterm.js if websocket is active
+                        # Send only new output to xterm.js if websocket is active
                         try:
                             websocket = self.xterm_terminals[session_id]["websocket"]
-                            await websocket.send_text(output)
+                            await websocket.send_text(new_output)
                         except Exception as e:
                             logger.debug(f"Failed to send output to xterm.js: {e}")
 
@@ -421,6 +430,29 @@ class WebServer:
     def is_xterm_active(self, session_id: str) -> bool:
         """Check if xterm.js terminal is active for this session"""
         return session_id in self.xterm_terminals
+
+    async def _get_incremental_output(self, session_id: str, session: InteractiveSession) -> str:
+        """Get terminal updates for xterm.js - send full buffer but track changes"""
+        current_output = await session.get_raw_output()
+        
+        # Get the last sent content for this session
+        last_sent_content = getattr(self, '_last_sent_content', {}).get(session_id, "")
+        
+        # Initialize tracking dict if needed
+        if not hasattr(self, '_last_sent_content'):
+            self._last_sent_content = {}
+        
+        # If output hasn't changed, return nothing
+        if current_output == last_sent_content:
+            return ""
+        
+        # Update tracking and return the full current output
+        # xterm.js will handle the rendering properly with full context
+        self._last_sent_content[session_id] = current_output
+        
+        # Send clear command followed by full output to prevent duplication
+        # This ensures xterm.js starts fresh each time
+        return f"\u001b[2J\u001b[H{current_output}"
 
     def _render_index_template(self, sessions: list[dict]) -> str:
         """Render the index page template"""
