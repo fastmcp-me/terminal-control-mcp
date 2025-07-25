@@ -13,6 +13,7 @@ Core tools:
 
 import asyncio
 import logging
+import shutil
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -66,6 +67,20 @@ logging.basicConfig(
 logger = logging.getLogger("terminal-control")
 
 
+# System dependency checks
+def check_tmux_available() -> None:
+    """Check if tmux is available on the system"""
+    if not shutil.which("tmux"):
+        logger.error("tmux is not installed or not found in PATH")
+        logger.error("Please install tmux:")
+        logger.error("  Ubuntu/Debian: sudo apt update && sudo apt install -y tmux")
+        logger.error("  macOS: brew install tmux")
+        logger.error("  CentOS/RHEL/Fedora: sudo yum install tmux")
+        sys.exit(1)
+    
+    logger.info("tmux dependency check passed")
+
+
 # Application context and lifecycle management
 
 
@@ -114,6 +129,9 @@ async def _cleanup_sessions(session_manager: SessionManager) -> None:
 async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
     """Manage application lifecycle with initialized components"""
     logger.info("Initializing Terminal Control MCP Server...")
+    
+    # Check system dependencies
+    check_tmux_available()
 
     # Initialize components
     session_manager = SessionManager()

@@ -1,3 +1,4 @@
+import logging
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -6,6 +7,8 @@ from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from .interactive_session import InteractiveSession
+
+logger = logging.getLogger(__name__)
 
 
 class SessionState(Enum):
@@ -36,6 +39,7 @@ class SessionManager:
         self.max_sessions = max_sessions
         self.default_timeout = default_timeout
         self._cleanup_task = None
+        logger.info(f"SessionManager initialized with max_sessions={max_sessions}, default_timeout={default_timeout}")
 
     async def create_session(
         self,
@@ -46,8 +50,14 @@ class SessionManager:
     ) -> str:
         """Create a new interactive session"""
 
+        # Check session limits
+        if len(self.sessions) >= self.max_sessions:
+            logger.warning(f"Maximum sessions ({self.max_sessions}) reached, cannot create new session")
+            raise RuntimeError(f"Maximum sessions ({self.max_sessions}) reached")
+
         # Generate unique session ID
         session_id = f"session_{uuid.uuid4().hex[:8]}"
+        logger.info(f"Creating session {session_id} for command: {command}")
 
         # Import here to avoid circular imports
         from .interactive_session import InteractiveSession
@@ -73,8 +83,18 @@ class SessionManager:
         )
 
         # Initialize session
-        await session.initialize()
-        self.session_metadata[session_id].state = SessionState.ACTIVE
+        try:
+            await session.initialize()
+            self.session_metadata[session_id].state = SessionState.ACTIVE
+            logger.info(f"Session {session_id} successfully initialized and active")
+        except Exception as e:
+            logger.error(f"Failed to initialize session {session_id}: {e}")
+            # Cleanup failed session
+            if session_id in self.sessions:
+                del self.sessions[session_id]
+            if session_id in self.session_metadata:
+                del self.session_metadata[session_id]
+            raise
 
         return session_id
 
@@ -83,20 +103,32 @@ class SessionManager:
         if session_id in self.sessions:
             # Update last activity
             self.session_metadata[session_id].last_activity = time.time()
+            logger.debug(f"Retrieved session {session_id}, updated last activity")
             return self.sessions[session_id]
+        logger.debug(f"Session {session_id} not found")
         return None
 
     async def destroy_session(self, session_id: str) -> bool:
         """Terminate and cleanup a session"""
         if session_id in self.sessions:
+            logger.info(f"Destroying session {session_id}")
             session = self.sessions[session_id]
-            await session.terminate()
+            try:
+                await session.terminate()
+                logger.info(f"Session {session_id} terminated successfully")
+            except Exception as e:
+                logger.error(f"Error terminating session {session_id}: {e}")
 
+            # Always cleanup from manager even if termination fails
             del self.sessions[session_id]
             del self.session_metadata[session_id]
+            logger.info(f"Session {session_id} removed from manager")
             return True
+        logger.warning(f"Cannot destroy session {session_id}: not found")
         return False
 
     async def list_sessions(self) -> list[SessionMetadata]:
         """List all active sessions"""
-        return list(self.session_metadata.values())
+        sessions = list(self.session_metadata.values())
+        logger.debug(f"Listed {len(sessions)} active sessions")
+        return sessions

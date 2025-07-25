@@ -48,7 +48,9 @@ def session_manager():
 def app_context(security_manager, session_manager):
     """Create application context with managers for integration tests"""
     return SimpleNamespace(
-        security_manager=security_manager, session_manager=session_manager
+        security_manager=security_manager, 
+        session_manager=session_manager,
+        web_server=None  # Mock web server as None for tests
     )
 
 

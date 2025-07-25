@@ -1,31 +1,29 @@
 # Terminal Control MCP Server
 
-A modern FastMCP-based server that enables Claude Code to control terminal programs through agent-directed interaction. Built with the latest MCP Python SDK 1.12.0, this server provides intelligent terminal session management for all types of commands - from simple utilities like `ls` and `git status` to complex interactive programs like SSH sessions, database connections, interactive installers, and debugging workflows.
+A modern MCP server built with tmux/libtmux that enables AI agents to control terminal programs through persistent sessions. Features real-time web interface for direct user access, comprehensive security controls, and support for any terminal program from simple commands to complex interactive workflows like debugging, SSH, and database sessions.
 
 ## ✨ Features
 
-### 🏗️ **Modern FastMCP Architecture**
-- **⚡ FastMCP Framework**: Built with MCP Python SDK 1.12.0 for optimal performance
-- **🔧 Decorator-Based Tools**: Clean `@mcp.tool()` decorators with automatic schema generation
-- **📝 Pydantic Models**: Type-safe input/output validation with structured data support
-- **🎯 Automatic Schema Generation**: JSON schemas generated from Python type hints
-- **🔄 Lifespan Management**: Proper startup/shutdown with resource cleanup
+### 🚀 **Tmux-Based Terminal Control**
+- **🖥️ Tmux Backend**: Reliable terminal multiplexing with libtmux Python API
+- **🔄 Session Persistence**: Maintain long-running terminal sessions with automatic cleanup
+- **📡 Raw Stream Capture**: Direct terminal output via tmux pipe-pane for perfect synchronization
+- **🎯 Agent Control**: AI agents decide timing and interaction flow without timeouts
+- **🌐 Dual Access**: Both agent (MCP) and user (web browser) can interact simultaneously
 
-### 🚀 **Agent-Controlled Terminal Interaction**
-- **🎯 Agent-Controlled Interaction**: Agents have full control over timing and interaction flow
-- **📊 Session Management**: Maintain persistent sessions with manual cleanup
-- **🔍 Real-time Screen Content**: Get current terminal output with timestamps
-- **🌐 Web Interface**: Direct browser access to terminal sessions for manual interaction
-- **🛡️ Simple Design**: No complex automation patterns - agents decide when to act
-- **🐛 Universal Terminal Support**: Control ANY terminal program (interactive and non-interactive)
-- **🔒 User-Controlled Security**: Maximum flexibility with user responsibility
+### 🌐 **Integrated Web Interface**
+- **🖥️ Real-time Terminal**: Live xterm.js terminal in browser with WebSocket updates
+- **🔗 Session URLs**: Direct browser access to any terminal session
+- **⚡ Zero Setup**: Automatic web server startup with configurable networking
+- **🎮 Manual Control**: Send commands directly without agent awareness
+- **📊 Session Management**: View all active sessions and their status
 
-### 💪 **Performance & Reliability**
-- **📦 Minimal Dependencies**: Only essential dependencies for terminal interaction
-- **⚡ Fast Installation**: Lightweight package with minimal footprint
-- **🛡️ Type Safety**: Full type coverage with mypy and Pydantic validation
-- **🧹 Clean Code**: Modern Python with black formatting and ruff linting
-- **⏱️ Smart Timeouts**: Process startup timeouts only - agents control interaction timing
+### 🛡️ **Comprehensive Security**
+- **🚫 Command Filtering**: Block dangerous operations (rm -rf /, sudo, etc.)
+- **📁 Path Protection**: Restrict access to user directories only
+- **⏱️ Rate Limiting**: 60 calls/minute with session limits (max 50 concurrent)
+- **📝 Audit Logging**: Complete security event tracking
+- **🔍 Input Validation**: Multi-layer validation for all inputs
 
 ## 🚀 Quick Start
 
@@ -102,7 +100,7 @@ Once installed, configure the MCP server in your AI assistant:
    ```json
    {
      "mcp.servers": {
-       "interactive-automation": {
+       "terminal-control": {
          "command": "/path/to/terminal-control-mcp/.venv/bin/python",
          "args": ["-m", "terminal_control_mcp.main"],
          "cwd": "/path/to/terminal-control-mcp"
@@ -115,7 +113,7 @@ Once installed, configure the MCP server in your AI assistant:
    ```json
    {
      "mcp.servers": {
-       "interactive-automation": {
+       "terminal-control": {
          "command": "/path/to/terminal-control-mcp/.venv/bin/terminal-control-mcp",
          "cwd": "/path/to/terminal-control-mcp"
        }
@@ -244,7 +242,7 @@ Execute any command and create a terminal session.
 ```bash
 # Install and activate
 pip install -e ".[dev]"
-claude mcp add interactive-automation -s user interactive-automation-mcp
+claude mcp add terminal-control -s user terminal-control-mcp
 
 # Verify installation
 claude mcp list
@@ -500,19 +498,38 @@ pytest tests/
 ## 📁 Project Structure
 
 ```
-[UPDATE THIS!]
+terminal-control-mcp/
+├── src/terminal_control_mcp/
+│   ├── main.py                 # FastMCP server with 5 MCP tools
+│   ├── session_manager.py      # Terminal session lifecycle management
+│   ├── interactive_session.py  # Tmux/libtmux terminal process control
+│   ├── web_server.py          # FastAPI web interface with WebSocket
+│   ├── security.py            # Multi-layer security validation
+│   ├── models.py              # Pydantic request/response models
+│   └── utils.py               # Logging and utility functions
+├── tests/
+│   ├── conftest.py            # Pytest fixtures and configuration
+│   ├── test_security_manager.py # Security validation tests
+│   ├── test_execute_command.py   # MCP tool integration tests
+│   ├── test_mcp_integration.py   # End-to-end workflow tests
+│   └── test_edge_cases.py        # Edge cases and error handling
+├── examples/
+│   └── example_debug.py       # Sample debugging script for testing
+├── CLAUDE.md                  # Development guidance for AI assistants
+├── README.md                  # This file
+└── pyproject.toml            # Python packaging and tool configuration
 ```
 
 ## 🚀 Development Status
 
-- ✅ **FastMCP Architecture** - Modern MCP Python SDK 1.12.0 implementation
-- ✅ **Agent-Controlled Design** - Simplified architecture with agent timing control
-- ✅ **Type Safety** - Full Pydantic model validation and mypy type coverage
-- ✅ **Minimal Dependencies** - Only essential dependencies for terminal interaction
-- ✅ **Comprehensive Security** - Security controls with user/agent responsibility
-- ✅ **Clean Architecture** - Well-organized, maintainable code with modern tooling
-- ✅ **Universal Terminal Support** - Works with ANY terminal program
-- ✅ **Code Quality** - All linting (ruff) and type checking (mypy) passes
+- ✅ **Tmux Integration** - Complete libtmux-based terminal control
+- ✅ **Web Interface** - Real-time xterm.js with WebSocket synchronization
+- ✅ **Agent Control** - 5 MCP tools for complete session lifecycle management
+- ✅ **Security Layer** - Multi-layer input validation and audit logging
+- ✅ **Type Safety** - Full Pydantic model validation and mypy coverage
+- ✅ **Test Coverage** - 88 passing tests covering security, integration, and edge cases
+- ✅ **Code Quality** - Clean architecture with black, ruff, and mypy validation
+- ✅ **Production Ready** - Reliable session management with proper cleanup
 
 ## 📄 License
 
