@@ -29,6 +29,21 @@ A modern FastMCP-based server that enables Claude Code to control terminal progr
 
 ## 🚀 Quick Start
 
+### System Requirements
+
+This package requires `tmux` for terminal multiplexing:
+
+```bash
+# Ubuntu/Debian
+sudo apt update && sudo apt install -y tmux
+
+# macOS
+brew install tmux
+
+# CentOS/RHEL/Fedora
+sudo yum install tmux  # or sudo dnf install tmux
+```
+
 ### Installation
 
 ```bash

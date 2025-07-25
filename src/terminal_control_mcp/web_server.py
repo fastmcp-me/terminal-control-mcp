@@ -15,7 +15,6 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
 
 from .interactive_session import InteractiveSession
 from .session_manager import SessionManager
@@ -27,12 +26,6 @@ DEFAULT_WEB_PORT = 8080
 DEFAULT_WEB_HOST = "0.0.0.0"  # Bind to all interfaces by default for remote access
 
 
-class SendInputRequest(BaseModel):
-    """Request model for sending input to a session"""
-
-    input_text: str
-
-
 class WebServer:
     """FastAPI-based web server for terminal session access"""
 
@@ -41,22 +34,14 @@ class WebServer:
         self.port = port
         self.host = DEFAULT_WEB_HOST
         self.app = FastAPI(title="Terminal Control Web Interface")
-        self.active_websockets: dict[str, set[WebSocket]] = {}
-        # Track xterm.js terminals as source of truth
-        self.xterm_terminals: dict[str, dict] = (
-            {}
-        )  # session_id -> {websocket, buffer, input_queue}
+        # Track active xterm.js terminals
+        self.xterm_terminals: dict[str, dict] = {}  # session_id -> {websocket, session}
         # Terminal buffer tracking for MCP tool access
         self.terminal_buffers: dict[str, str] = (
             {}
         )  # session_id -> current_screen_content
-        self.input_queues: dict[str, asyncio.Queue] = (
-            {}
-        )  # session_id -> input_queue for MCP tools
-        # Track last sent output position for incremental updates
-        self.last_sent_positions: dict[str, int] = (
-            {}
-        )  # session_id -> last_sent_char_position
+        # Input queues for MCP tools
+        self.input_queues: dict[str, asyncio.Queue] = {}  # session_id -> input_queue
 
         # Setup templates and static files
         self._setup_templates_and_static()
@@ -91,8 +76,6 @@ class WebServer:
         self.app.get("/session/{session_id}", response_class=HTMLResponse)(
             self._session_route
         )
-        self.app.post("/session/{session_id}/input")(self._send_input_route)
-        self.app.websocket("/session/{session_id}/ws")(self._websocket_route)
         self.app.websocket("/session/{session_id}/pty")(self._pty_websocket_route)
 
     async def _index_route(self, request: Request) -> HTMLResponse:
@@ -144,108 +127,8 @@ class WebServer:
         html_content = self._render_session_template(session_data)
         return HTMLResponse(content=html_content)
 
-    async def _notify_websockets(self, session_id: str, content: str) -> None:
-        """Notify all connected websockets for a session"""
-        if session_id not in self.active_websockets:
-            return
-
-        disconnected = set()
-        for websocket in self.active_websockets[session_id]:
-            try:
-                await websocket.send_text(content)
-            except Exception:
-                disconnected.add(websocket)
-
-        for ws in disconnected:
-            self.active_websockets[session_id].discard(ws)
-
-    async def _send_input_route(
-        self, session_id: str, request: SendInputRequest
-    ) -> dict:
-        """Send input to a session"""
-        session = await self.session_manager.get_session(session_id)
-        if not session:
-            raise HTTPException(status_code=404, detail="Session not found")
-
-        try:
-            await session.send_input(request.input_text)
-            await asyncio.sleep(0.1)  # Wait for output to update
-            screen_content = await session.get_output()
-            await self._notify_websockets(session_id, screen_content)
-            return {"success": True, "message": "Input sent successfully"}
-        except Exception as e:
-            logger.error(f"Failed to send input to session {session_id}: {e}")
-            raise HTTPException(status_code=500, detail=str(e)) from e
-
-    async def _websocket_route(self, websocket: WebSocket, session_id: str) -> None:
-        """WebSocket endpoint for real-time session updates"""
-        await self._setup_websocket_connection(websocket, session_id)
-        try:
-            await self._handle_websocket_session(websocket, session_id)
-        except WebSocketDisconnect:
-            pass
-        finally:
-            self._cleanup_websocket_connection(websocket, session_id)
-
-    async def _setup_websocket_connection(
-        self, websocket: WebSocket, session_id: str
-    ) -> None:
-        """Setup websocket connection"""
-        await websocket.accept()
-        if session_id not in self.active_websockets:
-            self.active_websockets[session_id] = set()
-        self.active_websockets[session_id].add(websocket)
-
-    def _cleanup_websocket_connection(
-        self, websocket: WebSocket, session_id: str
-    ) -> None:
-        """Clean up websocket connection"""
-        if session_id in self.active_websockets:
-            self.active_websockets[session_id].discard(websocket)
-            if not self.active_websockets[session_id]:
-                del self.active_websockets[session_id]
-
-    async def _handle_websocket_session(
-        self, websocket: WebSocket, session_id: str
-    ) -> None:
-        """Handle websocket session communication"""
-        session = await self.session_manager.get_session(session_id)
-        if not session:
-            await websocket.send_text("ERROR: Session not found")
-            return
-
-        await self._send_initial_content(websocket, session)
-        await self._websocket_update_loop(websocket, session)
-
-    async def _send_initial_content(
-        self, websocket: WebSocket, session: InteractiveSession
-    ) -> None:
-        """Send initial screen content to websocket"""
-        try:
-            screen_content = await session.get_output()
-            await websocket.send_text(screen_content)
-        except Exception as e:
-            await websocket.send_text(f"Error getting screen content: {e}")
-
-    async def _websocket_update_loop(
-        self, websocket: WebSocket, session: InteractiveSession
-    ) -> None:
-        """Main websocket update loop"""
-        while True:
-            try:
-                await asyncio.wait_for(websocket.receive_text(), timeout=1.0)
-            except asyncio.TimeoutError:
-                try:
-                    current_content = await session.get_output()
-                    await websocket.send_text(current_content)
-                except Exception as e:
-                    logger.warning(f"Failed to get screen content: {e}")
-                    break
-            except WebSocketDisconnect:
-                break
-
     async def _pty_websocket_route(self, websocket: WebSocket, session_id: str) -> None:
-        """WebSocket endpoint for xterm.js PTY connection - xterm.js as source of truth"""
+        """WebSocket endpoint for xterm.js PTY connection using tmux"""
         await websocket.accept()
 
         session = await self.session_manager.get_session(session_id)
@@ -254,11 +137,10 @@ class WebServer:
             await websocket.close()
             return
 
-        # Register this terminal as the source of truth
+        # Register this terminal connection
         self.xterm_terminals[session_id] = {
             "websocket": websocket,
             "session": session,
-            "buffer": "",
             "last_update": asyncio.get_event_loop().time(),
         }
 
@@ -266,98 +148,96 @@ class WebServer:
         if session_id not in self.input_queues:
             self.input_queues[session_id] = asyncio.Queue()
 
-        # Initialize terminal buffer and position tracking
-        self.terminal_buffers[session_id] = ""
-        self.last_sent_positions[session_id] = 0
-
         try:
-            # Send initial raw screen content to xterm.js (with ANSI sequences)
+            # Initialize buffer for MCP tools but don't send initial content to avoid duplication
+            # The pipe-pane stream will handle all terminal output
             initial_content = await session.get_raw_output()
-            if initial_content:
-                await websocket.send_text(initial_content)
-                self.terminal_buffers[session_id] = initial_content
-                self.xterm_terminals[session_id]["buffer"] = initial_content
-                # Initialize position tracking
-                self.last_sent_positions[session_id] = len(initial_content)
+            self.terminal_buffers[session_id] = initial_content
 
             # Start background task to handle MCP tool input
             mcp_input_task = asyncio.create_task(
                 self._handle_mcp_input(session_id, session)
             )
 
+            # Start background task to poll tmux for output changes
+            output_poll_task = asyncio.create_task(
+                self._poll_tmux_output(session_id, session, websocket)
+            )
+
             while True:
                 try:
-                    # Receive messages from xterm.js or handle timeouts for polling
+                    # Receive messages from xterm.js
                     message = await asyncio.wait_for(
-                        websocket.receive_text(), timeout=0.1
+                        websocket.receive_text(), timeout=1.0
                     )
                     data = json.loads(message)
 
                     if data["type"] == "input":
-                        # Send input to terminal session
+                        # Send input to tmux session
                         input_data = data["data"]
                         await session.send_input(input_data)
 
-                        # Get and send back only the new output (incremental)
-                        await asyncio.sleep(0.1)  # Brief delay for output
-                        new_output = await self._get_incremental_output(session_id, session)
-                        if new_output:
-                            await websocket.send_text(new_output)
-                            # Update buffer for MCP tools with full content
-                            full_output = await session.get_raw_output()
-                            self.terminal_buffers[session_id] = full_output
-                            self.xterm_terminals[session_id]["buffer"] = full_output
-                            self.xterm_terminals[session_id][
-                                "last_update"
-                            ] = asyncio.get_event_loop().time()
-
                     elif data["type"] == "resize":
-                        # Handle terminal resize (future enhancement)
-                        cols = data.get("cols", 80)
-                        rows = data.get("rows", 24)
-                        logger.debug(f"Terminal resize requested: {cols}x{rows}")
-
-                    elif data["type"] == "get_screen":
-                        # MCP tool requesting current screen content
-                        current_buffer = self.terminal_buffers.get(session_id, "")
-                        await websocket.send_text(
-                            json.dumps(
-                                {"type": "screen_content", "data": current_buffer}
-                            )
-                        )
+                        # Ignore resize events - tmux stays at fixed size for clean MCP output
+                        # Web terminal handles its own display formatting
+                        pass
 
                 except asyncio.TimeoutError:
-                    # Periodically check for new output and send only incremental updates
-                    new_output = await self._get_incremental_output(session_id, session)
-                    if new_output:
-                        await websocket.send_text(new_output)
-                        # Update buffer for MCP tools with full content
-                        full_output = await session.get_raw_output()
-                        self.terminal_buffers[session_id] = full_output
-                        self.xterm_terminals[session_id]["buffer"] = full_output
-                        self.xterm_terminals[session_id][
-                            "last_update"
-                        ] = asyncio.get_event_loop().time()
+                    # Keep connection alive
+                    continue
 
         except WebSocketDisconnect:
             logger.debug(f"PTY WebSocket disconnected for session {session_id}")
         except Exception as e:
             logger.error(f"PTY WebSocket error for session {session_id}: {e}")
         finally:
-            # Clean up tracking
+            # Clean up tasks and tracking
             mcp_input_task.cancel()
+            output_poll_task.cancel()
             if session_id in self.xterm_terminals:
                 del self.xterm_terminals[session_id]
             if session_id in self.terminal_buffers:
                 del self.terminal_buffers[session_id]
             if session_id in self.input_queues:
                 del self.input_queues[session_id]
-            if session_id in self.last_sent_positions:
-                del self.last_sent_positions[session_id]
             try:
                 await websocket.close()
             except Exception:
                 pass
+
+    async def _poll_tmux_output(
+        self, session_id: str, session: InteractiveSession, websocket: WebSocket
+    ) -> None:
+        """Poll tmux session for new stream output and send incremental data to websocket"""
+
+        try:
+            while True:
+                await asyncio.sleep(0.05)  # Poll every 50ms for responsiveness
+
+                try:
+                    # Get incremental stream output (only new data)
+                    new_stream_data = await session.get_stream_output()
+
+                    # Only send if there's new data
+                    if new_stream_data:
+                        # Send incremental stream data directly to xterm.js
+                        await websocket.send_text(new_stream_data)
+
+                        # Update buffer for MCP tools - get full content
+                        full_content = await session.get_raw_output()
+                        self.terminal_buffers[session_id] = full_content
+
+                        # Update for MCP tools
+                        if session_id in self.xterm_terminals:
+                            self.xterm_terminals[session_id][
+                                "last_update"
+                            ] = asyncio.get_event_loop().time()
+
+                except Exception as e:
+                    logger.debug(f"Error polling tmux stream output: {e}")
+
+        except asyncio.CancelledError:
+            pass
 
     async def _handle_mcp_input(
         self, session_id: str, session: InteractiveSession
@@ -370,28 +250,10 @@ class WebServer:
                 # Wait for input from MCP tools
                 input_data = await input_queue.get()
 
-                # Send to the underlying terminal session
+                # Send to the tmux session - no complex output handling needed
                 await session.send_input(input_data)
 
-                # Get incremental output and update buffer
-                await asyncio.sleep(0.1)  # Brief delay for output
-                new_output = await self._get_incremental_output(session_id, session)
-                if new_output:
-                    # Update buffer for MCP tools with full content
-                    full_output = await session.get_raw_output()
-                    self.terminal_buffers[session_id] = full_output
-                    if session_id in self.xterm_terminals:
-                        self.xterm_terminals[session_id]["buffer"] = full_output
-                        self.xterm_terminals[session_id][
-                            "last_update"
-                        ] = asyncio.get_event_loop().time()
-
-                        # Send only new output to xterm.js if websocket is active
-                        try:
-                            websocket = self.xterm_terminals[session_id]["websocket"]
-                            await websocket.send_text(new_output)
-                        except Exception as e:
-                            logger.debug(f"Failed to send output to xterm.js: {e}")
+                # tmux output polling will handle sending updates to web interface
 
         except asyncio.CancelledError:
             pass  # Task was cancelled, clean exit
@@ -410,13 +272,12 @@ class WebServer:
             logger.error(f"Failed to queue input for session {session_id}: {e}")
             return False
 
-    async def mcp_get_screen_content(self, session_id: str) -> str | None:
-        """Get current screen content from xterm.js buffer (for MCP tools)"""
-        # First try to get from xterm.js buffer (most up-to-date)
-        if session_id in self.terminal_buffers:
-            return self.terminal_buffers[session_id]
+    def is_xterm_active(self, session_id: str) -> bool:
+        """Check if xterm.js terminal is active for this session"""
+        return session_id in self.xterm_terminals
 
-        # Fallback to session if no xterm.js terminal is active
+    async def mcp_get_screen_content(self, session_id: str) -> str | None:
+        """Get current screen content from tmux session (for MCP tools)"""
         session = await self.session_manager.get_session(session_id)
         if session:
             try:
@@ -424,35 +285,7 @@ class WebServer:
             except Exception as e:
                 logger.warning(f"Failed to get session output: {e}")
                 return None
-
         return None
-
-    def is_xterm_active(self, session_id: str) -> bool:
-        """Check if xterm.js terminal is active for this session"""
-        return session_id in self.xterm_terminals
-
-    async def _get_incremental_output(self, session_id: str, session: InteractiveSession) -> str:
-        """Get terminal updates for xterm.js - send full buffer but track changes"""
-        current_output = await session.get_raw_output()
-        
-        # Get the last sent content for this session
-        last_sent_content = getattr(self, '_last_sent_content', {}).get(session_id, "")
-        
-        # Initialize tracking dict if needed
-        if not hasattr(self, '_last_sent_content'):
-            self._last_sent_content = {}
-        
-        # If output hasn't changed, return nothing
-        if current_output == last_sent_content:
-            return ""
-        
-        # Update tracking and return the full current output
-        # xterm.js will handle the rendering properly with full context
-        self._last_sent_content[session_id] = current_output
-        
-        # Send clear command followed by full output to prevent duplication
-        # This ensures xterm.js starts fresh each time
-        return f"\u001b[2J\u001b[H{current_output}"
 
     def _render_index_template(self, sessions: list[dict]) -> str:
         """Render the index page template"""
@@ -570,8 +403,8 @@ class WebServer:
                 .btn:hover {{ background: #0056b3; }}
                 .btn-secondary {{ background: #6c757d; }}
                 .btn-secondary:hover {{ background: #545b62; }}
-                .terminal-container {{ border: 1px solid #ddd; border-radius: 4px; background: #000; height: 600px; }}
-                #terminal {{ width: 100%; height: 100%; }}
+                .terminal-container {{ border: 1px solid #ddd; border-radius: 4px; background: #000; height: 600px; overflow: auto; }}
+                #terminal {{ width: fit-content; height: 100%; }}
                 code {{ background: #f8f9fa; padding: 2px 6px; border-radius: 3px; font-family: 'Monaco', 'Consolas', monospace; color: #333; }}
             </style>
         </head>
@@ -597,28 +430,25 @@ class WebServer:
             <!-- Load xterm.js -->
             <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
             <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
-            <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
             
             <script>
                 const sessionId = '{session_data['session_id']}';
                 
-                // Initialize xterm.js terminal
+                // Initialize xterm.js terminal with fixed dimensions matching tmux
                 const terminal = new Terminal({{
                     cursorBlink: true,
                     fontSize: 14,
                     fontFamily: 'Monaco, Consolas, "Courier New", monospace',
+                    cols: 120,
+                    rows: 30,
                     theme: {{
                         background: '#000000',
                         foreground: '#ffffff'
                     }}
                 }});
                 
-                const fitAddon = new FitAddon.FitAddon();
-                terminal.loadAddon(fitAddon);
-                
                 // Open terminal in the container
                 terminal.open(document.getElementById('terminal'));
-                fitAddon.fit();
                 
                 // WebSocket connection for terminal I/O
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -631,16 +461,10 @@ class WebServer:
                         
                         ws.onopen = function() {{
                             console.log('Terminal WebSocket connected');
-                            // Send initial terminal size
-                            ws.send(JSON.stringify({{
-                                type: 'resize',
-                                cols: terminal.cols,
-                                rows: terminal.rows
-                            }}));
                         }};
                         
                         ws.onmessage = function(event) {{
-                            // Write data directly to terminal
+                            // Write incremental stream data directly to terminal
                             terminal.write(event.data);
                         }};
                         
@@ -668,21 +492,6 @@ class WebServer:
                     }}
                 }});
                 
-                // Handle terminal resize
-                terminal.onResize(function(size) {{
-                    if (ws && ws.readyState === WebSocket.OPEN) {{
-                        ws.send(JSON.stringify({{
-                            type: 'resize',
-                            cols: size.cols,
-                            rows: size.rows
-                        }}));
-                    }}
-                }});
-                
-                // Resize terminal when window resizes
-                window.addEventListener('resize', function() {{
-                    fitAddon.fit();
-                }});
                 
                 // Connect WebSocket on page load
                 connectWebSocket();
