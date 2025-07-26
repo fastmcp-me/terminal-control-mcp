@@ -94,10 +94,7 @@ class EnvironmentConfig:
 class ExecuteCommandRequest(BaseModel):
     """Request to execute a command and create a session"""
 
-    command: str = Field(description="Command to execute")
-    command_args: list[str] | None = Field(
-        None, description="Additional command arguments"
-    )
+    full_command: str = Field(description="Complete shell command string to execute")
     execution_timeout: int = Field(
         30,
         description="Timeout in seconds for process startup (agents control interaction timing)",

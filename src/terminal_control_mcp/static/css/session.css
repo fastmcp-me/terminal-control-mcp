@@ -1,0 +1,140 @@
+/* Session page specific styles */
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #eee;
+}
+
+.session-info {
+    flex: 1;
+}
+
+.session-info h1 {
+    margin: 0;
+    color: #333;
+}
+
+.session-info p {
+    margin: 5px 0;
+    color: #666;
+}
+
+/* Keyboard shortcuts panel */
+.keyboard-shortcuts {
+    margin-bottom: 20px;
+}
+
+.shortcut-panel {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 15px;
+    background: #f8f9fa;
+}
+
+.shortcut-panel h3 {
+    margin: 0 0 15px 0;
+    color: #333;
+    font-size: 16px;
+}
+
+.modifier-keys {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.modifier-btn {
+    padding: 6px 12px;
+    border: 1px solid #ccc;
+    background: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+
+.modifier-btn:hover {
+    background: #e9ecef;
+}
+
+.modifier-btn.active {
+    background: #007bff;
+    color: white;
+    border-color: #007bff;
+}
+
+.key-input-group {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    align-items: center;
+}
+
+#key-input {
+    padding: 6px 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    width: 150px;
+    font-family: 'Monaco', 'Consolas', monospace;
+}
+
+#send-key, #clear-modifiers {
+    padding: 6px 12px;
+    border: 1px solid #007bff;
+    background: #007bff;
+    color: white;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+#send-key:hover, #clear-modifiers:hover {
+    background: #0056b3;
+}
+
+#clear-modifiers {
+    background: #6c757d;
+    border-color: #6c757d;
+}
+
+#clear-modifiers:hover {
+    background: #545b62;
+}
+
+.quick-shortcuts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.quick-btn {
+    padding: 4px 8px;
+    border: 1px solid #28a745;
+    background: #28a745;
+    color: white;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 11px;
+}
+
+.quick-btn:hover {
+    background: #218838;
+}
+
+/* Terminal container */
+.terminal-container {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: #000;
+    height: 600px;
+    overflow: auto;
+}
+
+#terminal {
+    width: fit-content;
+    height: 100%;
+}

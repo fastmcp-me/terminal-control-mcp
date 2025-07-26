@@ -34,7 +34,7 @@ class TestBasicCommands:
     async def test_echo_command(self, mock_context):
         """Test simple echo command"""
         request = ExecuteCommandRequest(
-            command="echo 'Hello World'", execution_timeout=30
+            full_command="echo 'Hello World'", execution_timeout=30
         )
         result = await tercon_execute_command(request, mock_context)
 
@@ -57,7 +57,7 @@ class TestBasicCommands:
     async def test_python_version(self, mock_context):
         """Test Python version command"""
         request = ExecuteCommandRequest(
-            command="python3 --version", execution_timeout=30
+            full_command="python3 --version", execution_timeout=30
         )
         result = await tercon_execute_command(request, mock_context)
 
@@ -79,7 +79,7 @@ class TestBasicCommands:
     @pytest.mark.asyncio
     async def test_whoami_command(self, mock_context):
         """Test whoami command"""
-        request = ExecuteCommandRequest(command="whoami", execution_timeout=30)
+        request = ExecuteCommandRequest(full_command="whoami", execution_timeout=30)
         result = await tercon_execute_command(request, mock_context)
 
         assert result.success
@@ -106,7 +106,7 @@ class TestSessionManagement:
         """Test creating and destroying a session"""
         # Create session
         request = ExecuteCommandRequest(
-            command="python3 -u -c \"input('Press enter: '); print('done')\"",
+            full_command="python3 -u -c \"input('Press enter: '); print('done')\"",
             execution_timeout=60,
         )
         result = await tercon_execute_command(request, mock_context)
@@ -133,7 +133,7 @@ class TestInteractiveWorkflows:
         """Test Python interactive input workflow"""
         # Start interactive command
         request = ExecuteCommandRequest(
-            command="python3 -u -c \"name=input('Enter name: '); print(f'Hello {name}!')\"",
+            full_command="python3 -u -c \"name=input('Enter name: '); print(f'Hello {name}!')\"",
             execution_timeout=60,
         )
         result = await tercon_execute_command(request, mock_context)
@@ -178,7 +178,7 @@ class TestInteractiveWorkflows:
         """Test Python choice workflow"""
         # Start interactive command
         request = ExecuteCommandRequest(
-            command="python3 -u -c \"choice=input('Continue? (y/n): '); print('Yes!' if choice=='y' else 'No!')\"",
+            full_command="python3 -u -c \"choice=input('Continue? (y/n): '); print('Yes!' if choice=='y' else 'No!')\"",
             execution_timeout=60,
         )
         result = await tercon_execute_command(request, mock_context)
@@ -218,7 +218,7 @@ class TestPythonREPL:
     async def test_python_repl_workflow(self, mock_context):
         """Test Python REPL as a complex interactive workflow"""
         # Start Python REPL
-        request = ExecuteCommandRequest(command="python3 -u", execution_timeout=60)
+        request = ExecuteCommandRequest(full_command="python3 -u", execution_timeout=60)
         result = await tercon_execute_command(request, mock_context)
         assert result.success
         session_id = result.session_id

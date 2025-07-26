@@ -77,7 +77,7 @@ def check_tmux_available() -> None:
         logger.error("  macOS: brew install tmux")
         logger.error("  CentOS/RHEL/Fedora: sudo yum install tmux")
         sys.exit(1)
-    
+
     logger.info("tmux dependency check passed")
 
 
@@ -129,7 +129,7 @@ async def _cleanup_sessions(session_manager: SessionManager) -> None:
 async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
     """Manage application lifecycle with initialized components"""
     logger.info("Initializing Terminal Control MCP Server...")
-    
+
     # Check system dependencies
     check_tmux_available()
 
@@ -379,7 +379,33 @@ async def tercon_send_input(
 
     Parameters (SendInputRequest):
     - session_id: str - ID of the session to send input to (from tercon_execute_command or tercon_list_sessions)
-    - input_text: str - Text to send to the process (without implicit newline)
+    - input_text: str - Text to send to the process (supports escape sequences for keyboard shortcuts)
+
+    Keyboard Shortcuts & Escape Sequences Support:
+    The input_text parameter supports terminal escape sequences for sending keyboard shortcuts:
+
+    Control Characters (Ctrl+Key):
+    - "\\x03" - Ctrl+C (interrupt/SIGINT)
+    - "\\x04" - Ctrl+D (EOF)
+    - "\\x08" - Ctrl+H (backspace)
+    - "\\x09" - Tab
+    - "\\x0a" - Enter/Line Feed
+    - "\\x0d" - Carriage Return
+    - "\\x1a" - Ctrl+Z (suspend)
+    - "\\x1b" - Escape key
+
+    Arrow Keys:
+    - "\\x1b[A" - Up arrow
+    - "\\x1b[B" - Down arrow
+    - "\\x1b[C" - Right arrow
+    - "\\x1b[D" - Left arrow
+
+    Function Keys:
+    - "\\x1bOP" - F1
+    - "\\x1bOQ" - F2
+    - "\\x1b[15~" - F5
+    - "\\x1b[17~" - F6
+    (F3-F12 and other special keys supported)
 
     Returns SendInputResponse with:
     - success: bool - True if input was sent successfully, False if failed
@@ -391,7 +417,8 @@ async def tercon_send_input(
     - Respond to prompts in interactive programs
     - Enter commands in shells or REPL environments
     - Provide input when programs are waiting for user response
-    - Send keystrokes to any interactive terminal program
+    - Send keyboard shortcuts to debuggers, editors, and interactive programs
+    - Navigate menus and interfaces using arrow keys and function keys
 
     IMPORTANT: Always do tercon_get_screen_content before tercon_send_input to check if the process is ready for input.
     """
@@ -451,8 +478,7 @@ async def tercon_execute_command(
     the agent. No output is returned - agents must use tercon_get_screen_content to see terminal state.
 
     Parameters (ExecuteCommandRequest):
-    - command: str - Command to execute (e.g., 'ssh host', 'python -u script.py', 'ls', 'mysql')
-    - command_args: List[str] | None - Additional command arguments (optional)
+    - full_command: str - Complete shell command string to execute (e.g., 'python -c "print(\'hello\')"', 'ssh user@host', 'ls -la')
     - execution_timeout: int - Max seconds for process startup (default: 30, agents control interaction timing)
     - environment: Dict[str, str] | None - Environment variables to set (optional)
     - working_directory: str | None - Directory to run command in (optional)
@@ -487,10 +513,8 @@ async def tercon_execute_command(
     ):
         raise ValueError("Security violation: Tool call rejected")
 
-    # Build the full command
-    full_command = request.command
-    if request.command_args:
-        full_command += " " + " ".join(request.command_args)
+    # Use the provided full command
+    full_command = request.full_command
 
     try:
         # Create session

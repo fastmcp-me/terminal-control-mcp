@@ -311,7 +311,7 @@ This walkthrough shows how to debug a real Python script using natural language 
 
 #### Getting Started
 ```
-> "Debug the file examples/example_debug.py and show me what we're working with"
+> "Debug the file examples/example_debug.py in a terminal session and show me what we're working with"
 ```
 
 Claude will start the Python debugger and show you:
@@ -506,7 +506,20 @@ terminal-control-mcp/
 │   ├── web_server.py          # FastAPI web interface with WebSocket
 │   ├── security.py            # Multi-layer security validation
 │   ├── models.py              # Pydantic request/response models
-│   └── utils.py               # Logging and utility functions
+│   ├── interaction_logger.py   # Session interaction logging
+│   ├── automation_types.py     # Type definitions for automation
+│   ├── utils.py               # Logging and utility functions
+│   ├── templates/             # Jinja2 HTML templates
+│   │   ├── index.html         # Session overview page template
+│   │   └── session.html       # Individual session interface template
+│   └── static/               # Web interface static assets
+│       ├── css/              # Stylesheets
+│       │   ├── main.css      # Overview page styles
+│       │   └── session.css   # Session interface styles
+│       └── js/               # JavaScript modules
+│           ├── overview.js   # Session overview functionality
+│           ├── session.js    # Session interface logic
+│           └── keyboard-shortcuts.js # Terminal keyboard handling
 ├── tests/
 │   ├── conftest.py            # Pytest fixtures and configuration
 │   ├── test_security_manager.py # Security validation tests
@@ -515,9 +528,12 @@ terminal-control-mcp/
 │   └── test_edge_cases.py        # Edge cases and error handling
 ├── examples/
 │   └── example_debug.py       # Sample debugging script for testing
+├── logs/                      # Session interaction logs
+│   └── interactions/          # Detailed session logs (JSON & text)
 ├── CLAUDE.md                  # Development guidance for AI assistants
 ├── README.md                  # This file
-└── pyproject.toml            # Python packaging and tool configuration
+├── pyproject.toml            # Python packaging and tool configuration
+└── pytest.ini               # Pytest configuration
 ```
 
 ## 🚀 Development Status
@@ -541,7 +557,7 @@ MIT License - see LICENSE file for details
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Make your changes
 4. Add tests for new functionality
-5. Ensure all tests pass: `ruff check src/ tests/ && mypy src/ --ignore-missing-imports`
+5. Ensure all tests pass: `ruff check src/ tests/ && mypy src/ --ignore-missing-imports && pytest tests/`
 6. Commit your changes (`git commit -m 'Add amazing feature'`)
 7. Push to the branch (`git push origin feature/amazing-feature`)
 8. Open a Pull Request
@@ -549,4 +565,5 @@ MIT License - see LICENSE file for details
 ## 🙏 Acknowledgments
 
 - Built on the [Model Context Protocol (MCP)](https://github.com/anthropics/mcp) by Anthropic
-- Uses [pexpect](https://pexpect.readthedocs.io/) for terminal automation
+- Uses [libtmux](https://libtmux.git-pull.com/) for reliable terminal multiplexing and session management
+- Powered by [FastAPI](https://fastapi.tiangolo.com/) for the web interface and [xterm.js](https://xtermjs.org/) for browser-based terminal emulation

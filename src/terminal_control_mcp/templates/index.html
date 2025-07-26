@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terminal Control - Sessions</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Terminal Control Sessions</h1>
+        <p>Active terminal sessions managed by the MCP server:</p>
+
+        {% if sessions %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Session ID</th>
+                        <th>Command</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for session in sessions %}
+                    <tr>
+                        <td><code>{{ session.session_id }}</code></td>
+                        <td><code>{{ session.command }}</code></td>
+                        <td><span class="status status-{{ session.state.lower() }}">{{ session.state }}</span></td>
+                        <td><a href="{{ session.url }}" class="btn btn-primary">View Session</a></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <div class="empty-state"><p>No active sessions</p></div>
+        {% endif %}
+    </div>
+    
+    <script src="/static/js/overview.js"></script>
+</body>
+</html>

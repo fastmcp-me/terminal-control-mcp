@@ -353,7 +353,7 @@ class TestAsyncEdgeCases:
             # Create multiple sessions rapidly
             for i in range(5):
                 request = ExecuteCommandRequest(
-                    command=f"echo 'session_{i}'", execution_timeout=30
+                    full_command=f"echo 'session_{i}'", execution_timeout=30
                 )
                 result = await tercon_execute_command(request, mock_context)
                 if result.success:
@@ -388,7 +388,7 @@ class TestAsyncEdgeCases:
     async def test_timeout_edge_cases(self, mock_context):
         """Test various timeout scenarios"""
         # Very short timeout
-        request = ExecuteCommandRequest(command="sleep 10", execution_timeout=1)
+        request = ExecuteCommandRequest(full_command="sleep 10", execution_timeout=1)
 
         result = await tercon_execute_command(request, mock_context)
         # May succeed or fail depending on timing
@@ -405,7 +405,7 @@ class TestAsyncEdgeCases:
         """Test concurrent operations on the same session"""
         # Start a session
         request = ExecuteCommandRequest(
-            command="python3 -u -c \"import time; input('wait: '); print('done')\"",
+            full_command="python3 -u -c \"import time; input('wait: '); print('done')\"",
             execution_timeout=30,
         )
         result = await tercon_execute_command(request, mock_context)

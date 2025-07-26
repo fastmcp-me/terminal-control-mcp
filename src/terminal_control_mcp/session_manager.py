@@ -39,7 +39,9 @@ class SessionManager:
         self.max_sessions = max_sessions
         self.default_timeout = default_timeout
         self._cleanup_task = None
-        logger.info(f"SessionManager initialized with max_sessions={max_sessions}, default_timeout={default_timeout}")
+        logger.info(
+            f"SessionManager initialized with max_sessions={max_sessions}, default_timeout={default_timeout}"
+        )
 
     async def create_session(
         self,
@@ -49,21 +51,48 @@ class SessionManager:
         working_directory: str | None = None,
     ) -> str:
         """Create a new interactive session"""
+        self._validate_session_creation()
+        session_id = self._generate_session_id(command)
+        session = self._create_session_object(
+            session_id, command, timeout, environment, working_directory
+        )
+        self._store_session_data(session_id, session, command, timeout)
 
-        # Check session limits
+        try:
+            await self._initialize_session(session_id, session)
+        except Exception as e:
+            self._cleanup_failed_session(session_id, e)
+            raise
+
+        return session_id
+
+    def _validate_session_creation(self) -> None:
+        """Validate if a new session can be created"""
         if len(self.sessions) >= self.max_sessions:
-            logger.warning(f"Maximum sessions ({self.max_sessions}) reached, cannot create new session")
+            logger.warning(
+                f"Maximum sessions ({self.max_sessions}) reached, cannot create new session"
+            )
             raise RuntimeError(f"Maximum sessions ({self.max_sessions}) reached")
 
-        # Generate unique session ID
+    def _generate_session_id(self, command: str) -> str:
+        """Generate a unique session ID"""
         session_id = f"session_{uuid.uuid4().hex[:8]}"
         logger.info(f"Creating session {session_id} for command: {command}")
+        return session_id
 
+    def _create_session_object(
+        self,
+        session_id: str,
+        command: str,
+        timeout: int | None,
+        environment: dict[str, str] | None,
+        working_directory: str | None,
+    ) -> "InteractiveSession":
+        """Create the InteractiveSession object"""
         # Import here to avoid circular imports
         from .interactive_session import InteractiveSession
 
-        # Create session
-        session = InteractiveSession(
+        return InteractiveSession(
             session_id=session_id,
             command=command,
             timeout=timeout or self.default_timeout,
@@ -71,7 +100,14 @@ class SessionManager:
             working_directory=working_directory,
         )
 
-        # Store session and metadata
+    def _store_session_data(
+        self,
+        session_id: str,
+        session: "InteractiveSession",
+        command: str,
+        timeout: int | None,
+    ) -> None:
+        """Store session and metadata"""
         self.sessions[session_id] = session
         self.session_metadata[session_id] = SessionMetadata(
             session_id=session_id,
@@ -82,21 +118,21 @@ class SessionManager:
             timeout=timeout or self.default_timeout,
         )
 
-        # Initialize session
-        try:
-            await session.initialize()
-            self.session_metadata[session_id].state = SessionState.ACTIVE
-            logger.info(f"Session {session_id} successfully initialized and active")
-        except Exception as e:
-            logger.error(f"Failed to initialize session {session_id}: {e}")
-            # Cleanup failed session
-            if session_id in self.sessions:
-                del self.sessions[session_id]
-            if session_id in self.session_metadata:
-                del self.session_metadata[session_id]
-            raise
+    async def _initialize_session(
+        self, session_id: str, session: "InteractiveSession"
+    ) -> None:
+        """Initialize the session"""
+        await session.initialize()
+        self.session_metadata[session_id].state = SessionState.ACTIVE
+        logger.info(f"Session {session_id} successfully initialized and active")
 
-        return session_id
+    def _cleanup_failed_session(self, session_id: str, error: Exception) -> None:
+        """Clean up a failed session"""
+        logger.error(f"Failed to initialize session {session_id}: {error}")
+        if session_id in self.sessions:
+            del self.sessions[session_id]
+        if session_id in self.session_metadata:
+            del self.session_metadata[session_id]
 
     async def get_session(self, session_id: str) -> Optional["InteractiveSession"]:
         """Retrieve a session by ID"""

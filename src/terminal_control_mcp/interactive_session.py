@@ -49,98 +49,134 @@ class InteractiveSession:
     async def initialize(self) -> None:
         """Initialize the tmux session using libtmux"""
         try:
-            # Log command execution
             self.interaction_logger.log_command_execution(
                 command=self.command, working_dir=self.working_directory
             )
 
-            # Set up environment
-            env = dict(os.environ)
-            env.update(
-                {
-                    "LC_ALL": "C.UTF-8",
-                    "LANG": "C.UTF-8",
-                    "LC_MESSAGES": "C",
-                    "PYTHONUNBUFFERED": "1",
-                }
-            )
-            env.update(self.environment)
-
-            # Create tmux server connection
-            loop = asyncio.get_event_loop()
-            self.tmux_server = await loop.run_in_executor(None, libtmux.Server)
-            assert self.tmux_server is not None
-
-            # Create new session with fixed dimensions
-            self.tmux_session = await loop.run_in_executor(
-                None,
-                lambda: self.tmux_server.new_session(
-                    session_name=self.tmux_session_name,
-                    start_directory=self.working_directory,
-                    width=120,
-                    height=30,
-                    detach=True,
-                ),
-            )
-            assert self.tmux_session is not None
-
-            # Get the default window and pane
-            self.tmux_window = self.tmux_session.windows[0]
-            self.tmux_pane = self.tmux_window.panes[0]
-
-            # Force resize the session and pane to ensure correct dimensions
-            await loop.run_in_executor(
-                None,
-                lambda: self.tmux_session.cmd("resize-window", "-x", "120", "-y", "30"),
-            )
-
-            # Clear any existing stream file and set up pipe-pane for raw terminal output
-            if self.output_stream_file.exists():
-                self.output_stream_file.unlink()
-
-            # Use pipe-pane to capture all terminal output to file
-            await loop.run_in_executor(
-                None,
-                lambda: self.tmux_pane.cmd(
-                    "pipe-pane", "-o", f"cat > {self.output_stream_file}"
-                ),
-            )
-
-            # Set environment variables in the session
-            for key, value in env.items():
-                if key not in ["LC_ALL", "LANG", "LC_MESSAGES", "PYTHONUNBUFFERED"]:
-                    continue  # Only set our specific env vars
-                
-                def set_env(k: str, v: str) -> None:
-                    assert self.tmux_session is not None
-                    self.tmux_session.set_environment(k, v)
-                
-                await loop.run_in_executor(None, lambda: set_env(key, value))
-
-            # Send the command to the pane
-            if self.command != "bash":  # If not just bash, run the command
-                await loop.run_in_executor(
-                    None, lambda: self.tmux_pane.send_keys(self.command, enter=True)
-                )
-
-            self.is_active = True
-
-            # Log session state
-            self.interaction_logger.log_session_state(
-                "initialized",
-                {
-                    "command": self.command,
-                    "tmux_session": self.tmux_session_name,
-                    "working_directory": self.working_directory,
-                },
-            )
-
-            # Brief pause for session to fully initialize
-            await asyncio.sleep(0.5)
+            env = self._prepare_environment()
+            await self._create_tmux_session(env)
+            await self._setup_terminal_output_capture()
+            await self._configure_session_environment(env)
+            await self._execute_initial_command()
+            self._finalize_initialization()
 
         except Exception as e:
             self.interaction_logger.log_error("initialization_error", str(e))
             raise RuntimeError(f"Failed to initialize tmux session: {str(e)}") from e
+
+    def _prepare_environment(self) -> dict[str, str]:
+        """Prepare environment variables for the session"""
+        env = dict(os.environ)
+        env.update(
+            {
+                "LC_ALL": "C.UTF-8",
+                "LANG": "C.UTF-8",
+                "LC_MESSAGES": "C",
+                "PYTHONUNBUFFERED": "1",
+            }
+        )
+        env.update(self.environment)
+        return env
+
+    async def _create_tmux_session(self, env: dict[str, str]) -> None:
+        """Create the tmux server and session"""
+        loop = asyncio.get_event_loop()
+        self.tmux_server = await loop.run_in_executor(None, libtmux.Server)
+        assert self.tmux_server is not None
+
+        if self.tmux_server is None:
+            raise RuntimeError("tmux server is not available")
+
+        tmux_server = self.tmux_server
+        self.tmux_session = await loop.run_in_executor(
+            None,
+            lambda: tmux_server.new_session(
+                session_name=self.tmux_session_name,
+                start_directory=self.working_directory,
+                width=120,
+                height=30,
+                detach=True,
+            ),
+        )
+        assert self.tmux_session is not None
+
+        # Get the default window and pane
+        self.tmux_window = self.tmux_session.windows[0]
+        self.tmux_pane = self.tmux_window.panes[0]
+
+        # Force resize to ensure correct dimensions
+        await self._resize_session()
+
+    async def _resize_session(self) -> None:
+        """Resize the tmux session to ensure correct dimensions"""
+        if self.tmux_session is None:
+            raise RuntimeError("tmux session is not available")
+
+        loop = asyncio.get_event_loop()
+        tmux_session = self.tmux_session
+        await loop.run_in_executor(
+            None,
+            lambda: tmux_session.cmd("resize-window", "-x", "120", "-y", "30"),
+        )
+
+    async def _setup_terminal_output_capture(self) -> None:
+        """Set up pipe-pane for terminal output capture"""
+        if self.output_stream_file.exists():
+            self.output_stream_file.unlink()
+
+        if self.tmux_pane is None:
+            raise RuntimeError("tmux pane is not available")
+
+        loop = asyncio.get_event_loop()
+        tmux_pane = self.tmux_pane
+        output_file = str(self.output_stream_file)
+        await loop.run_in_executor(
+            None,
+            lambda: tmux_pane.cmd("pipe-pane", "-o", f"cat > {output_file}"),
+        )
+
+    async def _configure_session_environment(self, env: dict[str, str]) -> None:
+        """Configure environment variables in the tmux session"""
+        loop = asyncio.get_event_loop()
+
+        for key, value in env.items():
+            if key not in ["LC_ALL", "LANG", "LC_MESSAGES", "PYTHONUNBUFFERED"]:
+                continue
+
+            def set_env(k: str, v: str) -> None:
+                assert self.tmux_session is not None
+                self.tmux_session.set_environment(k, v)
+
+            # Use local variables to avoid closure issues
+            def make_env_setter(k: str, v: str):
+                return lambda: set_env(k, v)
+
+            await loop.run_in_executor(None, make_env_setter(key, value))
+
+    async def _execute_initial_command(self) -> None:
+        """Execute the initial command if it's not just bash"""
+        if self.command != "bash":
+            if self.tmux_pane is None:
+                raise RuntimeError("tmux pane is not available")
+
+            loop = asyncio.get_event_loop()
+            tmux_pane = self.tmux_pane
+            command = self.command
+            await loop.run_in_executor(
+                None, lambda: tmux_pane.send_keys(command, enter=True)
+            )
+
+    def _finalize_initialization(self) -> None:
+        """Finalize the initialization process"""
+        self.is_active = True
+        self.interaction_logger.log_session_state(
+            "initialized",
+            {
+                "command": self.command,
+                "tmux_session": self.tmux_session_name,
+                "working_directory": self.working_directory,
+            },
+        )
 
     async def send_input(self, input_text: str, add_newline: bool = False) -> None:
         """Send input to the tmux session using libtmux"""
@@ -153,9 +189,12 @@ class InteractiveSession:
 
             # Send input to tmux pane
             loop = asyncio.get_event_loop()
-            assert self.tmux_pane is not None
+            if self.tmux_pane is None:
+                raise RuntimeError("tmux pane is not available")
+
+            tmux_pane = self.tmux_pane  # Local variable for lambda
             await loop.run_in_executor(
-                None, lambda: self.tmux_pane.send_keys(input_text, enter=add_newline)
+                None, lambda: tmux_pane.send_keys(input_text, enter=add_newline)
             )
 
         except Exception as e:
@@ -170,12 +209,10 @@ class InteractiveSession:
         try:
             # Capture pane content with ANSI sequences using libtmux
             loop = asyncio.get_event_loop()
-            assert self.tmux_pane is not None
+            tmux_pane = self.tmux_pane  # Local variable for lambda
             content = await loop.run_in_executor(
                 None,
-                lambda: self.tmux_pane.cmd(
-                    "capture-pane", "-e", "-S", "-", "-E", "-", "-p"
-                ),
+                lambda: tmux_pane.cmd("capture-pane", "-e", "-S", "-", "-E", "-", "-p"),
             )
 
             # cmd returns a tmux response object, get the output
@@ -226,35 +263,40 @@ class InteractiveSession:
             return
 
         try:
-            # Get final output before terminating
             final_output = await self.get_output()
-
-            # Kill the tmux session using libtmux
-            if self.tmux_session:
-                loop = asyncio.get_event_loop()
-                await loop.run_in_executor(None, lambda: self.tmux_session.kill())
-
-            # Log session end
-            self.interaction_logger.close_session(
-                exit_code=self.exit_code, final_output=final_output
-            )
-
+            await self._kill_tmux_session()
+            self._log_session_termination(final_output)
         except Exception as e:
             logger.debug(f"Error terminating tmux session: {e}")
-
         finally:
-            self.is_active = False
-            self.tmux_pane = None
-            self.tmux_window = None
-            self.tmux_session = None
-            self.tmux_server = None
+            self._cleanup_session_resources()
 
-            # Clean up stream file
-            try:
-                if self.output_stream_file.exists():
-                    self.output_stream_file.unlink()
-            except Exception:
-                pass  # Don't fail termination if cleanup fails
+    async def _kill_tmux_session(self) -> None:
+        """Kill the tmux session"""
+        if self.tmux_session:
+            loop = asyncio.get_event_loop()
+            tmux_session = self.tmux_session
+            await loop.run_in_executor(None, lambda: tmux_session.kill())
+
+    def _log_session_termination(self, final_output: str) -> None:
+        """Log the session termination"""
+        self.interaction_logger.close_session(
+            exit_code=self.exit_code, final_output=final_output
+        )
+
+    def _cleanup_session_resources(self) -> None:
+        """Clean up all session resources"""
+        self.is_active = False
+        self.tmux_pane = None
+        self.tmux_window = None
+        self.tmux_session = None
+        self.tmux_server = None
+
+        try:
+            if self.output_stream_file.exists():
+                self.output_stream_file.unlink()
+        except Exception:
+            pass  # Don't fail termination if cleanup fails
 
     def is_process_alive(self) -> bool:
         """Check if the tmux session is still active using libtmux"""

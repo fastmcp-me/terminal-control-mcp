@@ -9,6 +9,9 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# Control character range (Ctrl+A to Ctrl+Z)
+CTRL_Z_ASCII = 26
+
 # Constants for security validation
 CONTROL_CHAR_THRESHOLD = 32
 DEL_CHAR_CODE = 127
@@ -138,12 +141,17 @@ class SecurityManager:
 
         # Validate all string inputs for basic injection attempts
         for key, value in arguments.items():
-            if isinstance(value, str) and not self._validate_input(value):
-                self._log_security_event(
-                    "invalid_input", tool_name, {key: value[:100]}, client_id
-                )
-                logger.warning(f"Invalid input detected in {key}: {value[:100]}")
-                return False
+            if isinstance(value, str):
+                # Special handling for input_text in tercon_send_input - allow escape sequences
+                if tool_name == "tercon_send_input" and key == "input_text":
+                    # Skip basic validation here - will be handled in tool-specific validation
+                    continue
+                elif not self._validate_input(value):
+                    self._log_security_event(
+                        "invalid_input", tool_name, {key: value[:100]}, client_id
+                    )
+                    logger.warning(f"Invalid input detected in {key}: {value[:100]}")
+                    return False
 
         return True
 
@@ -162,8 +170,8 @@ class SecurityManager:
     def _validate_execute_command(self, arguments: dict, client_id: str) -> bool:
         """Validate execute_command specific requirements"""
 
-        # Command validation
-        command = arguments.get("command", "")
+        # Command validation - use full_command if present, otherwise command
+        command = arguments.get("full_command") or arguments.get("command", "")
         if not self._validate_command(command):
             self._log_security_event(
                 "dangerous_command", "execute_command", {"command": command}, client_id
@@ -201,7 +209,7 @@ class SecurityManager:
         """Validate send_input specific requirements"""
 
         input_text = arguments.get("input_text", "")
-        if not self._validate_input_text(input_text):
+        if not self._validate_input_text_with_escape_sequences(input_text):
             self._log_security_event(
                 "dangerous_input_text",
                 "send_input",
@@ -289,6 +297,72 @@ class SecurityManager:
                 return False
 
         return True
+
+    def _validate_input_text_with_escape_sequences(self, input_text: str) -> bool:
+        """Validate input text allowing legitimate terminal escape sequences"""
+        # Allow common control characters and escape sequences for terminal control
+        if self._is_legitimate_escape_sequence(input_text):
+            return True
+
+        # Fall back to regular validation for non-escape sequences
+        return self._validate_input_text(input_text)
+
+    def _is_legitimate_escape_sequence(self, text: str) -> bool:
+        """Check if text contains only legitimate terminal escape sequences"""
+        # Allow single control characters (Ctrl+A to Ctrl+Z)
+        if len(text) == 1 and 1 <= ord(text) <= CTRL_Z_ASCII:
+            return True
+
+        # Allow common control characters
+        allowed_control_chars = {
+            "\x03",  # Ctrl+C (ETX)
+            "\x04",  # Ctrl+D (EOT)
+            "\x08",  # Ctrl+H (Backspace)
+            "\x09",  # Tab
+            "\x0a",  # Line Feed
+            "\x0d",  # Carriage Return
+            "\x1a",  # Ctrl+Z (SUB)
+            "\x1b",  # Escape
+            "\x7f",  # DEL
+        }
+
+        if len(text) == 1 and text in allowed_control_chars:
+            return True
+
+        # Allow ANSI escape sequences (ESC followed by printable characters)
+        if text.startswith("\x1b") and len(text) > 1:
+            # Check that everything after ESC is printable or known control sequences
+            rest = text[1:]
+            # Allow common ANSI sequences: [, O, ], (, ), and printable chars
+            if all(c.isprintable() or c in "[O]()\x7e~" for c in rest):
+                return True
+
+        # Check for multi-byte escape sequences (arrow keys, function keys, etc.)
+        common_sequences = {
+            "\x1b[A",  # Up arrow
+            "\x1b[B",  # Down arrow
+            "\x1b[C",  # Right arrow
+            "\x1b[D",  # Left arrow
+            "\x1b[H",  # Home
+            "\x1b[F",  # End
+            "\x1bOP",  # F1
+            "\x1bOQ",  # F2
+            "\x1bOR",  # F3
+            "\x1bOS",  # F4
+            "\x1b[15~",  # F5
+            "\x1b[17~",  # F6
+            "\x1b[18~",  # F7
+            "\x1b[19~",  # F8
+            "\x1b[20~",  # F9
+            "\x1b[21~",  # F10
+            "\x1b[23~",  # F11
+            "\x1b[24~",  # F12
+        }
+
+        if text in common_sequences:
+            return True
+
+        return False
 
     def _validate_command(self, command: str) -> bool:
         """Validate command against dangerous patterns"""

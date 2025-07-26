@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Session {{ session_id }} - Terminal Control</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/session.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="session-info">
+                <h1>Session {{ session_id }}</h1>
+                <p><strong>Command:</strong> <code>{{ command }}</code></p>
+                <p><strong>Status:</strong> <span class="status status-{{ state.lower() }}">{{ state }}</span></p>
+                <p><strong>Process Running:</strong> {{ 'Yes' if process_running else 'No' }}</p>
+            </div>
+            <div>
+                <button id="destroy-session-btn" class="btn" style="background: #dc3545; margin-right: 10px;" title="Destroy this session">Destroy Session</button>
+                <a href="/" class="btn btn-secondary">← Back to Sessions</a>
+            </div>
+        </div>
+
+        <div class="keyboard-shortcuts">
+            <div class="shortcut-panel">
+                <h3>Keyboard Shortcuts</h3>
+                <div class="modifier-keys">
+                    <button class="modifier-btn" data-modifier="ctrl" title="Ctrl key">Ctrl</button>
+                    <button class="modifier-btn" data-modifier="alt" title="Alt key">Alt</button>
+                    <button class="modifier-btn" data-modifier="shift" title="Shift key">Shift</button>
+                    <button class="modifier-btn" data-modifier="meta" title="Meta/Cmd key">Meta</button>
+                </div>
+                <div class="key-input-group">
+                    <input type="text" id="key-input" placeholder="Press any key..." maxlength="1" title="Type a key to combine with modifiers">
+                    <button id="send-key" title="Send the key combination">Send</button>
+                    <button id="clear-modifiers" title="Clear all active modifiers">Clear</button>
+                </div>
+                <div class="quick-shortcuts">
+                    <button class="quick-btn" data-sequence="\x03" title="Ctrl+C (interrupt)">Ctrl+C</button>
+                    <button class="quick-btn" data-sequence="\x04" title="Ctrl+D (EOF)">Ctrl+D</button>
+                    <button class="quick-btn" data-sequence="\x1a" title="Ctrl+Z (suspend)">Ctrl+Z</button>
+                    <button class="quick-btn" data-sequence="\x1b[A" title="Up arrow">↑</button>
+                    <button class="quick-btn" data-sequence="\x1b[B" title="Down arrow">↓</button>
+                    <button class="quick-btn" data-sequence="\x1b[C" title="Right arrow">→</button>
+                    <button class="quick-btn" data-sequence="\x1b[D" title="Left arrow">←</button>
+                    <button class="quick-btn" data-sequence="\x09" title="Tab">Tab</button>
+                    <button class="quick-btn" data-sequence="\x1b" title="Escape">Esc</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="terminal-container">
+            <div id="terminal"></div>
+        </div>
+    </div>
+
+    <!-- Load xterm.js -->
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+    
+    <script>
+        // Set session ID for use by other scripts
+        const sessionId = '{{ session_id }}';
+    </script>
+    
+    <script src="/static/js/session.js"></script>
+    <script src="/static/js/keyboard-shortcuts.js"></script>
+</body>
+</html>

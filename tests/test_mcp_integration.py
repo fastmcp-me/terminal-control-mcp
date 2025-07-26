@@ -47,7 +47,7 @@ class TestMCPIntegration:
         ]
 
         for command, expected_content in test_commands:
-            request = ExecuteCommandRequest(command=command, execution_timeout=30)
+            request = ExecuteCommandRequest(full_command=command, execution_timeout=30)
             result = await tercon_execute_command(request, mock_context)
 
             assert result.success, f"Command failed: {result.command}"
@@ -73,7 +73,7 @@ class TestMCPIntegration:
     async def test_dangerous_command_blocking(self, mock_context, dangerous_commands):
         """Test that dangerous commands are blocked by security"""
         for command in dangerous_commands:
-            request = ExecuteCommandRequest(command=command)
+            request = ExecuteCommandRequest(full_command=command)
 
             with pytest.raises(ValueError, match="Security violation"):
                 await tercon_execute_command(request, mock_context)
@@ -83,7 +83,7 @@ class TestMCPIntegration:
         """Test path validation for working directory"""
         # Safe working directory should work
         safe_request = ExecuteCommandRequest(
-            command="echo 'test'", working_directory="/tmp"
+            full_command="echo 'test'", working_directory="/tmp"
         )
         result = await tercon_execute_command(safe_request, mock_context)
         assert result.success
@@ -95,7 +95,7 @@ class TestMCPIntegration:
 
         # Dangerous working directory should be blocked
         dangerous_request = ExecuteCommandRequest(
-            command="echo 'test'", working_directory="/etc"
+            full_command="echo 'test'", working_directory="/etc"
         )
 
         with pytest.raises(ValueError, match="Security violation"):
@@ -106,7 +106,7 @@ class TestMCPIntegration:
         """Test protection of critical environment variables"""
         # Safe environment variables should work
         safe_request = ExecuteCommandRequest(
-            command="echo $TEST_VAR", environment={"TEST_VAR": "safe_value"}
+            full_command="echo $TEST_VAR", environment={"TEST_VAR": "safe_value"}
         )
         result = await tercon_execute_command(safe_request, mock_context)
         assert result.success
@@ -118,7 +118,7 @@ class TestMCPIntegration:
 
         # Protected environment variables should be blocked
         dangerous_request = ExecuteCommandRequest(
-            command="echo $PATH", environment={"PATH": "/malicious/path"}
+            full_command="echo $PATH", environment={"PATH": "/malicious/path"}
         )
 
         with pytest.raises(ValueError, match="Security violation"):
@@ -134,7 +134,7 @@ class TestMCPIntegration:
 
         # Start a session with a safe command
         request = ExecuteCommandRequest(
-            command="python3 -u -c \"import time; input('Enter: '); print('done')\"",
+            full_command="python3 -u -c \"import time; input('Enter: '); print('done')\"",
             execution_timeout=60,
         )
         result = await tercon_execute_command(request, mock_context)
@@ -166,7 +166,7 @@ class TestMCPIntegration:
         """Test interactive workflow with input validation"""
         # Start interactive Python session
         request = ExecuteCommandRequest(
-            command="python3 -u -c \"name=input('Name: '); print(f'Hello {name}!')\"",
+            full_command="python3 -u -c \"name=input('Name: '); print(f'Hello {name}!')\"",
             execution_timeout=60,
         )
         result = await tercon_execute_command(request, mock_context)
@@ -199,7 +199,7 @@ class TestMCPIntegration:
         """Test that dangerous input is blocked"""
         # Start a simple interactive session
         request = ExecuteCommandRequest(
-            command="python3 -u -c \"x=input('Input: '); print(x)\"",
+            full_command="python3 -u -c \"x=input('Input: '); print(x)\"",
             execution_timeout=60,
         )
         result = await tercon_execute_command(request, mock_context)
@@ -231,7 +231,7 @@ class TestMCPIntegration:
         # This test would need to make many rapid calls to trigger rate limiting
         # For now, we'll just verify the security manager is being called
 
-        request = ExecuteCommandRequest(command="echo 'test'")
+        request = ExecuteCommandRequest(full_command="echo 'test'")
 
         # Mock the security manager to simulate rate limit exceeded
 
@@ -262,7 +262,7 @@ class TestMCPIntegration:
     @pytest.mark.asyncio
     async def test_python_repl_security(self, mock_context):
         """Test Python REPL with security considerations"""
-        request = ExecuteCommandRequest(command="python3 -u", execution_timeout=60)
+        request = ExecuteCommandRequest(full_command="python3 -u", execution_timeout=60)
         result = await tercon_execute_command(request, mock_context)
         assert result.success
         session_id = result.session_id
@@ -295,7 +295,7 @@ class TestMCPIntegration:
     async def test_error_handling_and_cleanup(self, mock_context):
         """Test proper error handling and session cleanup"""
         # Start a session
-        request = ExecuteCommandRequest(command="sleep 30", execution_timeout=60)
+        request = ExecuteCommandRequest(full_command="sleep 30", execution_timeout=60)
         result = await tercon_execute_command(request, mock_context)
         assert result.success
         session_id = result.session_id
@@ -343,7 +343,7 @@ class TestSecurityIntegrationScenarios:
         """Test prevention of multi-step attack scenarios"""
 
         # Try to create session with safe command first
-        request = ExecuteCommandRequest(command="echo 'innocent'")
+        request = ExecuteCommandRequest(full_command="echo 'innocent'")
         result = await tercon_execute_command(request, mock_context)
         assert result.success
         session_id = result.session_id
@@ -390,16 +390,16 @@ class TestSecurityIntegrationScenarios:
         escalation_attempts = [
             # Direct sudo attempts that should be blocked by current patterns
             ExecuteCommandRequest(
-                command="sudo passwd root"
+                full_command="sudo passwd root"
             ),  # matches sudo passwd pattern
-            ExecuteCommandRequest(command="su - root"),  # matches su - pattern
+            ExecuteCommandRequest(full_command="su - root"),  # matches su - pattern
             # Environment manipulation attempts
             ExecuteCommandRequest(
-                command="echo test", environment={"LD_PRELOAD": "/tmp/malicious.so"}
+                full_command="echo test", environment={"LD_PRELOAD": "/tmp/malicious.so"}
             ),
             # Path manipulation attempts
             ExecuteCommandRequest(
-                command="echo test", environment={"PATH": "/tmp/malicious:/usr/bin"}
+                full_command="echo test", environment={"PATH": "/tmp/malicious:/usr/bin"}
             ),
         ]
 
@@ -413,12 +413,12 @@ class TestSecurityIntegrationScenarios:
 
         exfiltration_attempts = [
             # Direct file access attempts
-            ExecuteCommandRequest(command="cat /etc/passwd"),
-            ExecuteCommandRequest(command="cp /etc/shadow /tmp/"),
+            ExecuteCommandRequest(full_command="cat /etc/passwd"),
+            ExecuteCommandRequest(full_command="cp /etc/shadow /tmp/"),
             # Working directory manipulation
-            ExecuteCommandRequest(command="ls", working_directory="/etc"),
+            ExecuteCommandRequest(full_command="ls", working_directory="/etc"),
             ExecuteCommandRequest(
-                command="find . -name '*.key'", working_directory="/.ssh"
+                full_command="find . -name '*.key'", working_directory="/.ssh"
             ),
         ]
 

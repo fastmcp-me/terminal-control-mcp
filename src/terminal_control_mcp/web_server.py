@@ -8,7 +8,9 @@ import asyncio
 import json
 import logging
 import os
+from asyncio import Task
 from pathlib import Path
+from typing import Optional
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -42,6 +44,8 @@ class WebServer:
         )  # session_id -> current_screen_content
         # Input queues for MCP tools
         self.input_queues: dict[str, asyncio.Queue] = {}  # session_id -> input_queue
+        # Overview WebSocket connections for auto-refresh
+        self.overview_websockets: list[WebSocket] = []
 
         # Setup templates and static files
         self._setup_templates_and_static()
@@ -59,9 +63,11 @@ class WebServer:
                 directory=str(templates_dir)
             )
         else:
-            # Create templates in memory if directory doesn't exist
+            # External templates are required - no fallback
             self.templates = None
-            logger.warning("Templates directory not found, using inline templates")
+            logger.error(
+                "Templates directory not found - external templates are required"
+            )
 
         # Setup static files directory
         static_dir = current_dir / "static"
@@ -77,6 +83,8 @@ class WebServer:
             self._session_route
         )
         self.app.websocket("/session/{session_id}/pty")(self._pty_websocket_route)
+        self.app.websocket("/overview")(self._overview_websocket_route)
+        self.app.delete("/session/{session_id}")(self._destroy_session_route)
 
     async def _index_route(self, request: Request) -> HTMLResponse:
         """Main page with list of sessions"""
@@ -131,79 +139,107 @@ class WebServer:
         """WebSocket endpoint for xterm.js PTY connection using tmux"""
         await websocket.accept()
 
+        session = await self._validate_session_for_websocket(websocket, session_id)
+        if not session:
+            return
+
+        self._register_terminal_connection(session_id, websocket, session)
+        tasks = await self._setup_websocket_tasks(session_id, session, websocket)
+
+        try:
+            await self._handle_websocket_messages(session, websocket)
+        except WebSocketDisconnect:
+            logger.debug(f"PTY WebSocket disconnected for session {session_id}")
+        except Exception as e:
+            logger.error(f"PTY WebSocket error for session {session_id}: {e}")
+        finally:
+            await self._cleanup_websocket_connection(session_id, tasks, websocket)
+
+    async def _validate_session_for_websocket(
+        self, websocket: WebSocket, session_id: str
+    ) -> Optional["InteractiveSession"]:
+        """Validate session exists for WebSocket connection"""
         session = await self.session_manager.get_session(session_id)
         if not session:
             await websocket.send_text("ERROR: Session not found")
             await websocket.close()
-            return
+            return None
+        return session
 
-        # Register this terminal connection
+    def _register_terminal_connection(
+        self, session_id: str, websocket: WebSocket, session: "InteractiveSession"
+    ) -> None:
+        """Register the terminal connection and initialize input queue"""
         self.xterm_terminals[session_id] = {
             "websocket": websocket,
             "session": session,
             "last_update": asyncio.get_event_loop().time(),
         }
 
-        # Initialize input queue for MCP tools
         if session_id not in self.input_queues:
             self.input_queues[session_id] = asyncio.Queue()
 
-        try:
-            # Initialize buffer for MCP tools but don't send initial content to avoid duplication
-            # The pipe-pane stream will handle all terminal output
-            initial_content = await session.get_raw_output()
-            self.terminal_buffers[session_id] = initial_content
+    async def _setup_websocket_tasks(
+        self, session_id: str, session: "InteractiveSession", websocket: WebSocket
+    ) -> dict[str, Task[None] | None]:
+        """Set up background tasks for WebSocket handling"""
+        # Initialize buffer for MCP tools
+        initial_content = await session.get_raw_output()
+        self.terminal_buffers[session_id] = initial_content
 
-            # Start background task to handle MCP tool input
-            mcp_input_task = asyncio.create_task(
-                self._handle_mcp_input(session_id, session)
-            )
+        # Start background tasks
+        mcp_input_task = asyncio.create_task(
+            self._handle_mcp_input(session_id, session)
+        )
+        output_poll_task = asyncio.create_task(
+            self._poll_tmux_output(session_id, session, websocket)
+        )
 
-            # Start background task to poll tmux for output changes
-            output_poll_task = asyncio.create_task(
-                self._poll_tmux_output(session_id, session, websocket)
-            )
+        return {"mcp_input_task": mcp_input_task, "output_poll_task": output_poll_task}
 
-            while True:
-                try:
-                    # Receive messages from xterm.js
-                    message = await asyncio.wait_for(
-                        websocket.receive_text(), timeout=1.0
-                    )
-                    data = json.loads(message)
-
-                    if data["type"] == "input":
-                        # Send input to tmux session
-                        input_data = data["data"]
-                        await session.send_input(input_data)
-
-                    elif data["type"] == "resize":
-                        # Ignore resize events - tmux stays at fixed size for clean MCP output
-                        # Web terminal handles its own display formatting
-                        pass
-
-                except asyncio.TimeoutError:
-                    # Keep connection alive
-                    continue
-
-        except WebSocketDisconnect:
-            logger.debug(f"PTY WebSocket disconnected for session {session_id}")
-        except Exception as e:
-            logger.error(f"PTY WebSocket error for session {session_id}: {e}")
-        finally:
-            # Clean up tasks and tracking
-            mcp_input_task.cancel()
-            output_poll_task.cancel()
-            if session_id in self.xterm_terminals:
-                del self.xterm_terminals[session_id]
-            if session_id in self.terminal_buffers:
-                del self.terminal_buffers[session_id]
-            if session_id in self.input_queues:
-                del self.input_queues[session_id]
+    async def _handle_websocket_messages(
+        self, session: "InteractiveSession", websocket: WebSocket
+    ) -> None:
+        """Handle incoming WebSocket messages"""
+        while True:
             try:
-                await websocket.close()
-            except Exception:
-                pass
+                message = await asyncio.wait_for(websocket.receive_text(), timeout=1.0)
+                data = json.loads(message)
+
+                if data["type"] == "input":
+                    await session.send_input(data["data"])
+                elif data["type"] == "resize":
+                    # Ignore resize events - tmux stays at fixed size for clean MCP output
+                    pass
+
+            except asyncio.TimeoutError:
+                # Keep connection alive
+                continue
+
+    async def _cleanup_websocket_connection(
+        self,
+        session_id: str,
+        tasks: dict[str, Task[None] | None],
+        websocket: WebSocket,
+    ) -> None:
+        """Clean up WebSocket connection and associated resources"""
+        # Cancel background tasks
+        for task in tasks.values():
+            if task is not None:
+                task.cancel()
+
+        # Clean up tracking dictionaries
+        for tracking_dict in [
+            self.xterm_terminals,
+            self.terminal_buffers,
+            self.input_queues,
+        ]:
+            tracking_dict.pop(session_id, None)
+
+        try:
+            await websocket.close()
+        except Exception:
+            pass
 
     async def _poll_tmux_output(
         self, session_id: str, session: InteractiveSession, websocket: WebSocket
@@ -232,6 +268,9 @@ class WebServer:
                             self.xterm_terminals[session_id][
                                 "last_update"
                             ] = asyncio.get_event_loop().time()
+
+                        # Check if session process has terminated and auto-destroy
+                        await self._check_session_termination(session_id, session)
 
                 except Exception as e:
                     logger.debug(f"Error polling tmux stream output: {e}")
@@ -287,221 +326,134 @@ class WebServer:
                 return None
         return None
 
+    async def _overview_websocket_route(self, websocket: WebSocket) -> None:
+        """WebSocket endpoint for session overview auto-refresh"""
+        await websocket.accept()
+        self.overview_websockets.append(websocket)
+
+        try:
+            await self._handle_overview_websocket_loop(websocket)
+        except WebSocketDisconnect:
+            pass
+        except Exception as e:
+            logger.error(f"Overview WebSocket error: {e}")
+        finally:
+            await self._cleanup_overview_websocket(websocket)
+
+    async def _handle_overview_websocket_loop(self, websocket: WebSocket) -> None:
+        """Handle the overview WebSocket update loop"""
+        while True:
+            await asyncio.sleep(2.0)
+            session_data = await self._get_session_data_for_overview()
+
+            try:
+                message = json.dumps({"type": "session_update", "sessions": session_data})
+                await websocket.send_text(message)
+            except Exception:
+                break
+
+    async def _get_session_data_for_overview(self) -> list[dict]:
+        """Get session data formatted for overview"""
+        sessions = await self.session_manager.list_sessions()
+        return [
+            {
+                "session_id": session.session_id,
+                "command": session.command,
+                "state": session.state.value,
+                "created_at": session.created_at,
+                "url": f"/session/{session.session_id}",
+            }
+            for session in sessions
+        ]
+
+    async def _cleanup_overview_websocket(self, websocket: WebSocket) -> None:
+        """Clean up overview WebSocket connection"""
+        if websocket in self.overview_websockets:
+            self.overview_websockets.remove(websocket)
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+
+    async def _destroy_session_route(self, session_id: str) -> dict:
+        """DELETE endpoint to destroy a session"""
+        success = await self.session_manager.destroy_session(session_id)
+
+        if success:
+            # Notify overview pages about session destruction
+            await self._broadcast_session_update()
+            return {"success": True, "message": "Session destroyed"}
+        else:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+    async def _broadcast_session_update(self) -> None:
+        """Broadcast session updates to all overview WebSocket connections"""
+        if not self.overview_websockets:
+            return
+
+        sessions = await self.session_manager.list_sessions()
+        session_data = [
+            {
+                "session_id": session.session_id,
+                "command": session.command,
+                "state": session.state.value,
+                "created_at": session.created_at,
+                "url": f"/session/{session.session_id}",
+            }
+            for session in sessions
+        ]
+
+        message = json.dumps({"type": "session_update", "sessions": session_data})
+
+        # Send to all connected overview clients
+        disconnected = []
+        for ws in self.overview_websockets:
+            try:
+                await ws.send_text(message)
+            except Exception:
+                disconnected.append(ws)
+
+        # Clean up disconnected websockets
+        for ws in disconnected:
+            self.overview_websockets.remove(ws)
+
+    async def _check_session_termination(
+        self, session_id: str, session: InteractiveSession
+    ) -> None:
+        """Check if session process has terminated and auto-destroy if needed"""
+        try:
+            if not session.is_process_alive():
+                logger.info(
+                    f"Auto-destroying session {session_id} - process terminated"
+                )
+                await self.session_manager.destroy_session(session_id)
+                await self._broadcast_session_update()
+        except Exception as e:
+            logger.debug(f"Error checking session termination: {e}")
+
     def _render_index_template(self, sessions: list[dict]) -> str:
         """Render the index page template"""
-        if self.templates:
-            # Use Jinja2 template if available
-            try:
-                template_result = self.templates.get_template("index.html").render(
-                    sessions=sessions
-                )
-                return str(template_result)
-            except Exception:
-                pass
+        if not self.templates:
+            raise RuntimeError(
+                "Templates directory not found - external templates are required"
+            )
 
-        # Fallback to inline template
-        session_rows = ""
-        for session in sessions:
-            session_rows += f"""
-            <tr>
-                <td><code>{session['session_id']}</code></td>
-                <td><code>{session['command']}</code></td>
-                <td><span class="status status-{session['state'].lower()}">{session['state']}</span></td>
-                <td><a href="{session['url']}" class="btn btn-primary">View Session</a></td>
-            </tr>
-            """
-
-        # Create content based on whether sessions exist
-        if not sessions:
-            content = '<div class="empty-state"><p>No active sessions</p></div>'
-        else:
-            content = f"""
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Session ID</th>
-                            <th>Command</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {session_rows}
-                    </tbody>
-                </table>
-                """
-
-        return f"""
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Terminal Control - Sessions</title>
-            <style>
-                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }}
-                .container {{ max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
-                h1 {{ color: #333; margin-bottom: 20px; }}
-                table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-                th, td {{ padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }}
-                th {{ background-color: #f8f9fa; font-weight: 600; }}
-                .btn {{ display: inline-block; padding: 8px 16px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; font-size: 14px; }}
-                .btn:hover {{ background: #0056b3; }}
-                .status {{ padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }}
-                .status-active {{ background: #d4edda; color: #155724; }}
-                .status-waiting {{ background: #fff3cd; color: #856404; }}
-                .status-error {{ background: #f8d7da; color: #721c24; }}
-                .status-terminated {{ background: #d1ecf1; color: #0c5460; }}
-                code {{ background: #f8f9fa; padding: 2px 6px; border-radius: 3px; font-family: 'Monaco', 'Consolas', monospace; }}
-                .empty-state {{ text-align: center; padding: 40px; color: #666; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>Terminal Control Sessions</h1>
-                <p>Active terminal sessions managed by the MCP server:</p>
-
-                {content}
-            </div>
-        </body>
-        </html>
-        """
+        template_result = self.templates.get_template("index.html").render(
+            sessions=sessions
+        )
+        return str(template_result)
 
     def _render_session_template(self, session_data: dict) -> str:
         """Render the session interface template"""
-        if self.templates:
-            # Use Jinja2 template if available
-            try:
-                template_result = self.templates.get_template("session.html").render(
-                    **session_data
-                )
-                return str(template_result)
-            except Exception:
-                pass
+        if not self.templates:
+            raise RuntimeError(
+                "Templates directory not found - external templates are required"
+            )
 
-        # Fallback to inline template
-        return f"""
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Session {session_data['session_id']} - Terminal Control</title>
-            <style>
-                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }}
-                .container {{ max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
-                .header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #eee; }}
-                .session-info {{ flex: 1; }}
-                .session-info h1 {{ margin: 0; color: #333; }}
-                .session-info p {{ margin: 5px 0; color: #666; }}
-                .status {{ padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }}
-                .status-active {{ background: #d4edda; color: #155724; }}
-                .status-waiting {{ background: #fff3cd; color: #856404; }}
-                .status-error {{ background: #f8d7da; color: #721c24; }}
-                .status-terminated {{ background: #d1ecf1; color: #0c5460; }}
-                .btn {{ display: inline-block; padding: 8px 16px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; font-size: 14px; border: none; cursor: pointer; }}
-                .btn:hover {{ background: #0056b3; }}
-                .btn-secondary {{ background: #6c757d; }}
-                .btn-secondary:hover {{ background: #545b62; }}
-                .terminal-container {{ border: 1px solid #ddd; border-radius: 4px; background: #000; height: 600px; overflow: auto; }}
-                #terminal {{ width: fit-content; height: 100%; }}
-                code {{ background: #f8f9fa; padding: 2px 6px; border-radius: 3px; font-family: 'Monaco', 'Consolas', monospace; color: #333; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <div class="session-info">
-                        <h1>Session {session_data['session_id']}</h1>
-                        <p><strong>Command:</strong> <code>{session_data['command']}</code></p>
-                        <p><strong>Status:</strong> <span class="status status-{session_data['state'].lower()}">{session_data['state']}</span></p>
-                        <p><strong>Process Running:</strong> {'Yes' if session_data['process_running'] else 'No'}</p>
-                    </div>
-                    <div>
-                        <a href="/" class="btn btn-secondary">← Back to Sessions</a>
-                    </div>
-                </div>
-
-                <div class="terminal-container">
-                    <div id="terminal"></div>
-                </div>
-            </div>
-
-            <!-- Load xterm.js -->
-            <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
-            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
-            
-            <script>
-                const sessionId = '{session_data['session_id']}';
-                
-                // Initialize xterm.js terminal with fixed dimensions matching tmux
-                const terminal = new Terminal({{
-                    cursorBlink: true,
-                    fontSize: 14,
-                    fontFamily: 'Monaco, Consolas, "Courier New", monospace',
-                    cols: 120,
-                    rows: 30,
-                    theme: {{
-                        background: '#000000',
-                        foreground: '#ffffff'
-                    }}
-                }});
-                
-                // Open terminal in the container
-                terminal.open(document.getElementById('terminal'));
-                
-                // WebSocket connection for terminal I/O
-                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                const wsUrl = `${{protocol}}//${{window.location.host}}/session/${{sessionId}}/pty`;
-                let ws = null;
-                
-                function connectWebSocket() {{
-                    try {{
-                        ws = new WebSocket(wsUrl);
-                        
-                        ws.onopen = function() {{
-                            console.log('Terminal WebSocket connected');
-                        }};
-                        
-                        ws.onmessage = function(event) {{
-                            // Write incremental stream data directly to terminal
-                            terminal.write(event.data);
-                        }};
-                        
-                        ws.onclose = function() {{
-                            console.log('Terminal WebSocket connection closed');
-                            setTimeout(connectWebSocket, 2000);
-                        }};
-                        
-                        ws.onerror = function(error) {{
-                            console.error('Terminal WebSocket error:', error);
-                        }};
-                    }} catch (error) {{
-                        console.error('Failed to connect terminal WebSocket:', error);
-                        setTimeout(connectWebSocket, 2000);
-                    }}
-                }}
-                
-                // Handle terminal input
-                terminal.onData(function(data) {{
-                    if (ws && ws.readyState === WebSocket.OPEN) {{
-                        ws.send(JSON.stringify({{
-                            type: 'input',
-                            data: data
-                        }}));
-                    }}
-                }});
-                
-                
-                // Connect WebSocket on page load
-                connectWebSocket();
-                
-                // Focus terminal
-                terminal.focus();
-            </script>
-        </body>
-        </html>
-        """
+        template_result = self.templates.get_template("session.html").render(
+            **session_data
+        )
+        return str(template_result)
 
     async def start(self) -> None:
         """Start the web server"""
