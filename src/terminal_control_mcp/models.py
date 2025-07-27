@@ -132,3 +132,30 @@ class ExecuteCommandResponse(BaseModel):
     web_url: str | None = Field(
         None, description="Web interface URL for direct browser access to this session"
     )
+    error: str | None = None
+
+
+class OpenTerminalRequest(BaseModel):
+    """Request to open a new terminal session"""
+
+    shell: str = Field("bash", description="Shell to use (bash, zsh, fish, sh, etc.)")
+    working_directory: str | None = Field(None, description="Working directory")
+    environment: dict[str, str] | None = Field(
+        None, description="Environment variables"
+    )
+
+
+class OpenTerminalResponse(BaseModel):
+    """Response from opening a terminal session"""
+
+    success: bool
+    session_id: str
+    shell: str
+    web_url: str | None = Field(
+        None, description="Web interface URL for direct browser access to this session"
+    )
+    screen_content: str | None = None
+    timestamp: str | None = Field(
+        None, description="ISO timestamp when screen content was captured"
+    )
+    error: str | None = None

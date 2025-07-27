@@ -53,28 +53,56 @@ class WebServer:
 
     def _setup_templates_and_static(self) -> None:
         """Setup Jinja2 templates and static file serving"""
-        # Get the directory of this file
-        current_dir = Path(__file__).parent
+        try:
+            # Try to use importlib.resources for installed package
+            from importlib import resources
+            
+            try:
+                # Check if templates are available via package resources
+                template_path = resources.files('terminal_control_mcp') / 'templates'
+                if template_path.exists():
+                    templates_dir = template_path
+                    logger.info(f"Using package templates directory at: {templates_dir}")
+                    self.templates: Jinja2Templates | None = Jinja2Templates(
+                        directory=str(templates_dir)
+                    )
+                    logger.info("Package templates successfully loaded")
+                else:
+                    raise FileNotFoundError("Package templates not found")
+            except (ImportError, FileNotFoundError):
+                # Fall back to development mode (source directory)
+                current_dir = Path(__file__).parent
+                templates_dir = current_dir / "templates"
+                logger.info(f"Falling back to source templates directory at: {templates_dir}")
+                
+                if templates_dir.exists():
+                    self.templates = Jinja2Templates(directory=str(templates_dir))
+                    logger.info("Source templates successfully loaded")
+                else:
+                    self.templates = None
+                    logger.error(f"Templates directory not found at {templates_dir}")
+                    raise RuntimeError("Templates not found in package or source directory")
 
-        # Setup templates directory
-        templates_dir = current_dir / "templates"
-        if templates_dir.exists():
-            self.templates: Jinja2Templates | None = Jinja2Templates(
-                directory=str(templates_dir)
-            )
-        else:
-            # External templates are required - no fallback
+            # Setup static files directory
+            try:
+                static_path = resources.files('terminal_control_mcp') / 'static'
+                if static_path.exists():
+                    static_dir = static_path
+                    logger.info(f"Using package static directory at: {static_dir}")
+                    self.app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+                else:
+                    raise FileNotFoundError("Package static files not found")
+            except (ImportError, FileNotFoundError):
+                # Fall back to development mode
+                current_dir = Path(__file__).parent
+                static_dir = current_dir / "static"
+                if static_dir.exists():
+                    logger.info(f"Using source static directory at: {static_dir}")
+                    self.app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+                    
+        except Exception as e:
+            logger.error(f"Error setting up templates and static files: {e}")
             self.templates = None
-            logger.error(
-                "Templates directory not found - external templates are required"
-            )
-
-        # Setup static files directory
-        static_dir = current_dir / "static"
-        if static_dir.exists():
-            self.app.mount(
-                "/static", StaticFiles(directory=str(static_dir)), name="static"
-            )
 
     def _setup_routes(self) -> None:
         """Setup FastAPI routes"""
@@ -187,6 +215,16 @@ class WebServer:
         initial_content = await session.get_raw_output()
         self.terminal_buffers[session_id] = initial_content
 
+        # Send existing terminal stream content to the WebSocket when first connecting
+        try:
+            # Get the full stream content from the beginning for xterm.js
+            stream_content = await self._get_full_stream_content(session)
+            if stream_content:
+                await websocket.send_text(stream_content)
+                logger.debug(f"Sent existing stream content to WebSocket for session {session_id}")
+        except Exception as e:
+            logger.warning(f"Failed to send initial stream content to WebSocket: {e}")
+
         # Start background tasks
         mcp_input_task = asyncio.create_task(
             self._handle_mcp_input(session_id, session)
@@ -196,6 +234,20 @@ class WebServer:
         )
 
         return {"mcp_input_task": mcp_input_task, "output_poll_task": output_poll_task}
+
+    async def _get_full_stream_content(self, session: "InteractiveSession") -> str:
+        """Get the full stream content from the beginning for initial WebSocket send"""
+        if not session.is_active or not session.output_stream_file.exists():
+            return ""
+
+        try:
+            # Read the entire stream file from the beginning
+            with open(session.output_stream_file, "rb") as f:
+                full_data = f.read()
+            return full_data.decode("utf-8", errors="replace")
+        except Exception as e:
+            logger.debug(f"Error reading full stream content: {e}")
+            return ""
 
     async def _handle_websocket_messages(
         self, session: "InteractiveSession", websocket: WebSocket
@@ -229,12 +281,9 @@ class WebServer:
                 task.cancel()
 
         # Clean up tracking dictionaries
-        for tracking_dict in [
-            self.xterm_terminals,
-            self.terminal_buffers,
-            self.input_queues,
-        ]:
-            tracking_dict.pop(session_id, None)
+        self.xterm_terminals.pop(session_id, None)
+        self.terminal_buffers.pop(session_id, None)
+        self.input_queues.pop(session_id, None)
 
         try:
             await websocket.close()
@@ -347,7 +396,9 @@ class WebServer:
             session_data = await self._get_session_data_for_overview()
 
             try:
-                message = json.dumps({"type": "session_update", "sessions": session_data})
+                message = json.dumps(
+                    {"type": "session_update", "sessions": session_data}
+                )
                 await websocket.send_text(message)
             except Exception:
                 break

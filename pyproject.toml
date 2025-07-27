@@ -67,6 +67,13 @@ where = ["src"]
 [tool.setuptools.package-dir]
 "" = "src"
 
+[tool.setuptools.package-data]
+terminal_control_mcp = [
+    "templates/*.html",
+    "static/css/*.css",
+    "static/js/*.js",
+]
+
 [tool.black]
 line-length = 88
 target-version = ['py310']

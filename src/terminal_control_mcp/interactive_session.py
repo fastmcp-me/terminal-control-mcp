@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from collections.abc import Callable
 from pathlib import Path
 
 import libtmux
@@ -148,7 +149,7 @@ class InteractiveSession:
                 self.tmux_session.set_environment(k, v)
 
             # Use local variables to avoid closure issues
-            def make_env_setter(k: str, v: str):
+            def make_env_setter(k: str, v: str) -> Callable[[], None]:
                 return lambda: set_env(k, v)
 
             await loop.run_in_executor(None, make_env_setter(key, value))

@@ -17,12 +17,12 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from src.terminal_control_mcp.main import (
-    tercon_destroy_session,
-    tercon_execute_command,
-    tercon_get_screen_content,
-    tercon_send_input,
+    exit_terminal,
+    open_terminal,
+    get_screen_content,
+    send_input,
 )
-from src.terminal_control_mcp.models import ExecuteCommandRequest
+from src.terminal_control_mcp.models import OpenTerminalRequest
 from src.terminal_control_mcp.security import (
     CONTROL_CHAR_THRESHOLD,
     DEFAULT_MAX_CALLS_PER_MINUTE,
@@ -352,10 +352,10 @@ class TestAsyncEdgeCases:
         try:
             # Create multiple sessions rapidly
             for i in range(5):
-                request = ExecuteCommandRequest(
-                    full_command=f"echo 'session_{i}'", execution_timeout=30
+                request = OpenTerminalRequest(
+                    shell="bash", execution_timeout=30
                 )
-                result = await tercon_execute_command(request, mock_context)
+                result = await open_terminal(request, mock_context)
                 if result.success:
                     session_ids.append(result.session_id)
 
@@ -370,7 +370,7 @@ class TestAsyncEdgeCases:
                 from src.terminal_control_mcp.models import DestroySessionRequest
 
                 destroy_request = DestroySessionRequest(session_id=session_id)
-                await tercon_destroy_session(destroy_request, mock_context)
+                await exit_terminal(destroy_request, mock_context)
 
         except Exception as e:
             # Clean up any remaining sessions
@@ -379,7 +379,7 @@ class TestAsyncEdgeCases:
                     from src.terminal_control_mcp.models import DestroySessionRequest
 
                     destroy_request = DestroySessionRequest(session_id=session_id)
-                    await tercon_destroy_session(destroy_request, mock_context)
+                    await exit_terminal(destroy_request, mock_context)
                 except Exception:
                     pass
             raise e
@@ -388,27 +388,34 @@ class TestAsyncEdgeCases:
     async def test_timeout_edge_cases(self, mock_context):
         """Test various timeout scenarios"""
         # Very short timeout
-        request = ExecuteCommandRequest(full_command="sleep 10", execution_timeout=1)
+        request = OpenTerminalRequest(shell="bash", execution_timeout=1)
 
-        result = await tercon_execute_command(request, mock_context)
+        result = await open_terminal(request, mock_context)
         # May succeed or fail depending on timing
 
         if result.success:
+            # Send a sleep command that would timeout
+            from src.terminal_control_mcp.models import SendInputRequest
+            
+            input_request = SendInputRequest(
+                session_id=result.session_id, input_text="sleep 10"
+            )
+            await send_input(input_request, mock_context)
+
             # Clean up
             from src.terminal_control_mcp.models import DestroySessionRequest
 
             destroy_request = DestroySessionRequest(session_id=result.session_id)
-            await tercon_destroy_session(destroy_request, mock_context)
+            await exit_terminal(destroy_request, mock_context)
 
     @pytest.mark.asyncio
     async def test_concurrent_operations_same_session(self, mock_context):
         """Test concurrent operations on the same session"""
         # Start a session
-        request = ExecuteCommandRequest(
-            full_command="python3 -u -c \"import time; input('wait: '); print('done')\"",
-            execution_timeout=30,
+        request = OpenTerminalRequest(
+            shell="python3", execution_timeout=30
         )
-        result = await tercon_execute_command(request, mock_context)
+        result = await open_terminal(request, mock_context)
 
         if not result.success:
             return
@@ -416,6 +423,14 @@ class TestAsyncEdgeCases:
         session_id = result.session_id
 
         try:
+            # Send a Python command that waits for input
+            from src.terminal_control_mcp.models import SendInputRequest
+            
+            input_request = SendInputRequest(
+                session_id=session_id, input_text="import time; input('wait: '); print('done')"
+            )
+            await send_input(input_request, mock_context)
+
             await asyncio.sleep(0.5)  # Let session start
 
             # Try concurrent operations
@@ -428,11 +443,11 @@ class TestAsyncEdgeCases:
             )
 
             screen_request = GetScreenContentRequest(session_id=session_id)
-            tasks.append(tercon_get_screen_content(screen_request, mock_context))
+            tasks.append(get_screen_content(screen_request, mock_context))
 
             # Send input
             input_request = SendInputRequest(session_id=session_id, input_text="test")
-            tasks.append(tercon_send_input(input_request, mock_context))
+            tasks.append(send_input(input_request, mock_context))
 
             # Execute concurrently
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -451,7 +466,7 @@ class TestAsyncEdgeCases:
                 from src.terminal_control_mcp.models import DestroySessionRequest
 
                 destroy_request = DestroySessionRequest(session_id=session_id)
-                await tercon_destroy_session(destroy_request, mock_context)
+                await exit_terminal(destroy_request, mock_context)
             except Exception:
                 pass
 
@@ -469,8 +484,8 @@ class TestErrorHandling:
         malformed_args = [
             None,
             {},
-            {"command": None},
-            {"command": 123},  # Wrong type
+            {"shell": None},
+            {"shell": 123},  # Wrong type
             {"environment": "not_a_dict"},  # Wrong type
             {"working_directory": 123},  # Wrong type
         ]
@@ -479,7 +494,7 @@ class TestErrorHandling:
             try:
                 if args is None:
                     continue
-                result = security_manager.validate_tool_call("execute_command", args)
+                result = security_manager.validate_tool_call("open_terminal", args)
                 # Should either return False or raise an exception
                 assert isinstance(result, bool)
             except (TypeError, AttributeError, ValueError):

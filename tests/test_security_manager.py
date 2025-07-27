@@ -318,41 +318,33 @@ class TestSessionLimits:
 class TestToolCallValidation:
     """Test overall tool call validation"""
 
-    def test_validate_safe_execute_command(self, security_manager):
-        """Test validation of safe execute_command calls"""
+    def test_validate_safe_open_terminal(self, security_manager):
+        """Test validation of safe open_terminal calls"""
         arguments = {
-            "command": "ls -la",
+            "shell": "bash",
             "working_directory": "/tmp",
             "environment": {"DEBUG": "true"},
         }
 
-        assert (
-            security_manager.validate_tool_call("tercon_execute_command", arguments)
-            is True
-        )
+        assert security_manager.validate_tool_call("open_terminal", arguments) is True
 
-    def test_block_dangerous_execute_command(self, security_manager):
-        """Test blocking dangerous execute_command calls"""
+    def test_block_dangerous_open_terminal(self, security_manager):
+        """Test blocking dangerous open_terminal calls"""
         dangerous_args = [
-            {"command": "rm -rf /"},
-            {"command": "ls", "working_directory": "/etc"},
-            {"command": "ls", "environment": {"PATH": "/malicious"}},
-            {"command": "echo 'test'; rm -rf /"},
+            {"shell": "bash; rm -rf /"},
+            {"shell": "bash", "working_directory": "/etc"},
+            {"shell": "bash", "environment": {"PATH": "/malicious"}},
+            {"shell": "/bin/bash && rm -rf /"},
         ]
 
         for args in dangerous_args:
-            assert (
-                security_manager.validate_tool_call("tercon_execute_command", args)
-                is False
-            )
+            assert security_manager.validate_tool_call("open_terminal", args) is False
 
     def test_validate_safe_send_input(self, security_manager):
         """Test validation of safe send_input calls"""
         arguments = {"input_text": "print('hello')"}
 
-        assert (
-            security_manager.validate_tool_call("tercon_send_input", arguments) is True
-        )
+        assert security_manager.validate_tool_call("send_input", arguments) is True
 
     def test_block_dangerous_send_input(self, security_manager):
         """Test blocking dangerous send_input calls"""
@@ -363,41 +355,35 @@ class TestToolCallValidation:
         ]
 
         for args in dangerous_args:
-            assert (
-                security_manager.validate_tool_call("tercon_send_input", args) is False
-            )
+            assert security_manager.validate_tool_call("send_input", args) is False
 
     def test_validate_other_tool_calls(self, security_manager):
         """Test validation of other tool calls (should pass)"""
         arguments = {"session_id": "test123"}
 
         assert (
-            security_manager.validate_tool_call("tercon_list_sessions", arguments)
+            security_manager.validate_tool_call("list_terminal_sessions", arguments)
             is True
         )
+        assert security_manager.validate_tool_call("exit_terminal", arguments) is True
         assert (
-            security_manager.validate_tool_call("tercon_destroy_session", arguments)
-            is True
-        )
-        assert (
-            security_manager.validate_tool_call("tercon_get_screen_content", arguments)
-            is True
+            security_manager.validate_tool_call("get_screen_content", arguments) is True
         )
 
     def test_rate_limiting_in_tool_validation(self, security_manager):
         """Test that rate limiting is enforced in tool call validation"""
-        arguments = {"command": "ls"}
+        arguments = {"shell": "bash"}
 
         # Max out rate limit
         for _ in range(60):
             security_manager.validate_tool_call(
-                "tercon_execute_command", arguments, "test_client"
+                "open_terminal", arguments, "test_client"
             )
 
         # Next call should be blocked due to rate limit
         assert (
             security_manager.validate_tool_call(
-                "tercon_execute_command", arguments, "test_client"
+                "open_terminal", arguments, "test_client"
             )
             is False
         )
@@ -486,53 +472,47 @@ class TestSecurityIntegration:
         """Test a complete security validation workflow"""
         # This should pass all security checks
         safe_arguments = {
-            "command": "python -c 'print(\"hello\")'",
+            "shell": "bash",
             "working_directory": "/tmp",
             "environment": {"DEBUG": "false"},
         }
 
         result = security_manager.validate_tool_call(
-            "tercon_execute_command", safe_arguments, "integration_test_client"
+            "open_terminal", safe_arguments, "integration_test_client"
         )
 
         assert result is True
 
     def test_multi_layer_security_blocking(self, security_manager):
         """Test that multiple security layers can block malicious requests"""
-        # This should be blocked by command validation
+        # This should be blocked by shell validation
         malicious_arguments = {
-            "command": "rm -rf / && echo 'pwned'",
+            "shell": "bash; rm -rf /",
             "working_directory": "../../../etc",  # This would also be blocked
             "environment": {"PATH": "/malicious"},  # This would also be blocked
         }
 
         result = security_manager.validate_tool_call(
-            "tercon_execute_command", malicious_arguments, "malicious_client"
+            "open_terminal", malicious_arguments, "malicious_client"
         )
 
         assert result is False
 
     def test_security_across_different_clients(self, security_manager):
         """Test security isolation between different clients"""
-        safe_args = {"command": "echo hello"}
+        safe_args = {"shell": "bash"}
 
         # Each client should have independent rate limiting
         assert (
-            security_manager.validate_tool_call(
-                "tercon_execute_command", safe_args, "client1"
-            )
+            security_manager.validate_tool_call("open_terminal", safe_args, "client1")
             is True
         )
         assert (
-            security_manager.validate_tool_call(
-                "tercon_execute_command", safe_args, "client2"
-            )
+            security_manager.validate_tool_call("open_terminal", safe_args, "client2")
             is True
         )
         assert (
-            security_manager.validate_tool_call(
-                "tercon_execute_command", safe_args, "client3"
-            )
+            security_manager.validate_tool_call("open_terminal", safe_args, "client3")
             is True
         )
 

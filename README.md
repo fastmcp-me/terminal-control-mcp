@@ -166,7 +166,7 @@ export TERMINAL_CONTROL_EXTERNAL_HOST=your-server.com  # External hostname/IP fo
 
 ### 📋 Session Management (2 tools)
 
-#### **`tercon_list_sessions`**
+#### **`list_terminal_sessions`**
 List all active terminal sessions with detailed status information.
 
 Shows comprehensive session information:
@@ -176,12 +176,12 @@ Shows comprehensive session information:
 - Total session count (max 50 concurrent)
 - **Web interface URLs** logged for user access
 
-#### **`tercon_destroy_session`**
+#### **`exit_terminal`**
 Terminate and cleanup a terminal session safely.
 
 ### 🤖 Agent-Controlled Interaction (2 tools)
 
-#### **`tercon_get_screen_content`**
+#### **`get_screen_content`**
 Get current terminal screen content with timestamp.
 
 **Key features:**
@@ -191,14 +191,14 @@ Get current terminal screen content with timestamp.
 - Agents decide when to wait longer based on timestamps
 
 **Agent workflow:**
-1. Call `tercon_get_screen_content` to see current terminal state
+1. Call `get_screen_content` to see current terminal state
 2. Analyze screen content and timestamp
 3. Decide whether to wait longer or take action
-4. Use `tercon_send_input` when process is ready for input
+4. Use `send_input` when process is ready for input
 
 **User access**: Same content visible in web interface for direct interaction
 
-#### **`tercon_send_input`**
+#### **`send_input`**
 Send text input to a terminal session.
 
 **Features:**
@@ -210,7 +210,7 @@ Send text input to a terminal session.
 
 ### 🔗 Session Creation (1 tool)
 
-#### **`tercon_execute_command`**
+#### **`open_terminal`**
 Execute any command and create a terminal session.
 
 **Universal command execution:**
@@ -218,16 +218,16 @@ Execute any command and create a terminal session.
 - ALL commands create persistent sessions (interactive and non-interactive)
 - Process startup timeout only (default: 30 seconds)
 - Environment variables and working directory control
-- NO output returned - agents must use `tercon_get_screen_content` to see terminal state
+- Returns initial screen content immediately - agents can see terminal state right away
 - Returns session ID for agent-controlled interaction
 - **Web interface URL** logged for direct user access
 
 **Agent-controlled workflow:**
-1. `tercon_execute_command` - Creates session and starts process
-2. `tercon_get_screen_content` - Agent sees current terminal state (output or interface) with timestamp
-3. `tercon_send_input` - Agent sends input if process is waiting for interaction
+1. `open_terminal` - Creates session with specified shell and returns initial screen content
+2. `send_input` - Agent sends commands or input to the terminal
+3. `get_screen_content` - Agent checks current terminal state when needed
 4. Repeat steps 2-3 as needed (agent controls timing)
-5. `tercon_destroy_session` - Clean up when finished (REQUIRED for all sessions)
+5. `exit_terminal` - Clean up when finished (REQUIRED for all sessions)
 
 ## 📚 Usage Examples & Tutorial
 
@@ -400,13 +400,13 @@ Claude terminates the debugger and cleans up the session.
 - Ensure working directory is correct
 
 **Process Not Responding**:
-- Use `tercon_get_screen_content` to see current state
+- Use `get_screen_content` to see current state
 - Check timestamps to see if output is recent
 - Look for blocking prompts requiring input
 
 **Session Becomes Unresponsive**:
-- Use `tercon_list_sessions` to check session state
-- Use `tercon_destroy_session` to clean up and start fresh
+- Use `list_terminal_sessions` to check session state
+- Use `exit_terminal` to clean up and start fresh
 - Check for programs waiting for input
 
 #### Debug Mode

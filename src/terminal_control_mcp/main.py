@@ -4,11 +4,11 @@ Terminal Control MCP Server - FastMCP Implementation
 Provides interactive terminal session management for LLM agents
 
 Core tools:
-- tercon_execute_command: Execute commands and create sessions
-- tercon_get_screen_content: Get current terminal output from sessions
-- tercon_send_input: Send input to interactive sessions
-- tercon_list_sessions: Show active sessions
-- tercon_destroy_session: Clean up sessions
+- open_terminal: Open new terminal sessions with specified shell
+- get_screen_content: Get current terminal output from sessions
+- send_input: Send input to interactive sessions
+- list_terminal_sessions: Show active sessions
+- exit_terminal: Clean up sessions
 """
 
 import asyncio
@@ -26,11 +26,11 @@ from mcp.server.fastmcp import Context, FastMCP
 from .models import (
     DestroySessionRequest,
     DestroySessionResponse,
-    ExecuteCommandRequest,
-    ExecuteCommandResponse,
     GetScreenContentRequest,
     GetScreenContentResponse,
     ListSessionsResponse,
+    OpenTerminalRequest,
+    OpenTerminalResponse,
     SendInputRequest,
     SendInputResponse,
     SessionInfo,
@@ -175,7 +175,7 @@ mcp = FastMCP("Terminal Control", lifespan=app_lifespan)
 
 # Session Management Tools
 @mcp.tool()
-async def tercon_list_sessions(ctx: Context) -> ListSessionsResponse:
+async def list_terminal_sessions(ctx: Context) -> ListSessionsResponse:
     """Show all currently running terminal sessions
 
     Use this when users ask "list my sessions", "what sessions are running", "show active sessions",
@@ -201,7 +201,7 @@ async def tercon_list_sessions(ctx: Context) -> ListSessionsResponse:
     configured based on the server's network settings and can be customized via environment
     variables for remote access.
 
-    Use with: tercon_get_screen_content, tercon_send_input, tercon_destroy_session
+    Use with: get_screen_content, send_input, exit_terminal
     """
     app_ctx = ctx.request_context.lifespan_context
 
@@ -239,7 +239,7 @@ async def tercon_list_sessions(ctx: Context) -> ListSessionsResponse:
 
 
 @mcp.tool()
-async def tercon_destroy_session(
+async def exit_terminal(
     request: DestroySessionRequest, ctx: Context
 ) -> DestroySessionResponse:
     """Close and clean up a terminal session
@@ -250,7 +250,7 @@ async def tercon_destroy_session(
     Properly closes a session and frees up resources.
 
     Parameters (DestroySessionRequest):
-    - session_id: str - ID of the session to destroy (from tercon_list_sessions or tercon_execute_command)
+    - session_id: str - ID of the session to destroy (from list_terminal_sessions or open_terminal)
 
     Returns DestroySessionResponse with:
     - success: bool - True if session was found and destroyed, False if not found
@@ -276,21 +276,19 @@ async def tercon_destroy_session(
 
 
 @mcp.tool()
-async def tercon_get_screen_content(
+async def get_screen_content(
     request: GetScreenContentRequest, ctx: Context
 ) -> GetScreenContentResponse:
     """See what's currently displayed in a terminal session
 
     Use this when users ask "what's on screen", "show me the output", "what's currently showing",
-    "what do you see", or after starting any command with execute_command.
-
-    ALWAYS use this immediately before tercon_send_input to see if the process is ready for input.
+    "what do you see", or to check the current state of a terminal.
 
     Returns the current terminal output visible to the user. This allows the agent
     to see what's currently on screen and decide what to do next.
 
     Parameters (GetScreenContentRequest):
-    - session_id: str - ID of the session to get screen content from (from tercon_execute_command or tercon_list_sessions)
+    - session_id: str - ID of the session to get screen content from (from open_terminal or list_terminal_sessions)
 
     Returns GetScreenContentResponse with:
     - success: bool - Operation success status
@@ -311,7 +309,7 @@ async def tercon_get_screen_content(
     - Debug interactive program behavior
     - Get timing information for agent decision-making
 
-    Use with: tercon_execute_command (to get session_id), tercon_send_input (when ready for input)
+    Use with: open_terminal (to get session_id), send_input (when ready for input)
     """
     app_ctx = ctx.request_context.lifespan_context
 
@@ -366,9 +364,7 @@ async def tercon_get_screen_content(
 
 
 @mcp.tool()
-async def tercon_send_input(
-    request: SendInputRequest, ctx: Context
-) -> SendInputResponse:
+async def send_input(request: SendInputRequest, ctx: Context) -> SendInputResponse:
     """Type commands or input into an interactive terminal session
 
     Use this when users ask to "type", "send", "enter", "input", "respond", "answer", or "press" something.
@@ -378,7 +374,7 @@ async def tercon_send_input(
     Use this when the agent determines the process is ready for input.
 
     Parameters (SendInputRequest):
-    - session_id: str - ID of the session to send input to (from tercon_execute_command or tercon_list_sessions)
+    - session_id: str - ID of the session to send input to (from open_terminal or list_terminal_sessions)
     - input_text: str - Text to send to the process (supports escape sequences for keyboard shortcuts)
 
     Keyboard Shortcuts & Escape Sequences Support:
@@ -420,13 +416,13 @@ async def tercon_send_input(
     - Send keyboard shortcuts to debuggers, editors, and interactive programs
     - Navigate menus and interfaces using arrow keys and function keys
 
-    IMPORTANT: Always do tercon_get_screen_content before tercon_send_input to check if the process is ready for input.
+    Use this tool to send commands, respond to prompts, or provide input to running processes.
     """
     app_ctx = ctx.request_context.lifespan_context
 
     # Security validation
     if not app_ctx.security_manager.validate_tool_call(
-        "tercon_send_input", request.model_dump()
+        "send_input", request.model_dump()
     ):
         raise ValueError("Security violation: Tool call rejected")
 
@@ -464,92 +460,95 @@ async def tercon_send_input(
         )
 
 
-# Command Execution Tool
+# Terminal Opening Tool
 @mcp.tool()
-async def tercon_execute_command(
-    request: ExecuteCommandRequest, ctx: Context
-) -> ExecuteCommandResponse:
-    """Start any terminal command or program in a new session
+async def open_terminal(
+    request: OpenTerminalRequest, ctx: Context
+) -> OpenTerminalResponse:
+    """Open a new terminal session with a specified shell
 
-    Use this when users ask to "start", "run", "launch", "execute", "debug", "connect to", or "open" any program.
-    Examples: "start Python", "debug this script", "connect to SSH", "run mysql client", "launch git status".
+    Use this when users ask to "open a terminal", "start a shell", "open bash", "create a new session".
+    Examples: "open a terminal", "start a bash session", "create a new terminal with zsh".
 
-    Creates a session and executes the specified command. Commands create a persistent session that must be managed by
-    the agent. No output is returned - agents must use tercon_get_screen_content to see terminal state.
+    Creates a new terminal session with the specified shell and automatically returns the current
+    screen content. The terminal is ready for interactive use immediately.
 
-    Parameters (ExecuteCommandRequest):
-    - full_command: str - Complete shell command string to execute (e.g., 'python -c "print(\'hello\')"', 'ssh user@host', 'ls -la')
-    - execution_timeout: int - Max seconds for process startup (default: 30, agents control interaction timing)
+    Parameters (OpenTerminalRequest):
+    - shell: str - Shell to use (bash, zsh, fish, sh, etc.) - defaults to "bash"
+    - working_directory: str | None - Directory to start the terminal in (optional)
     - environment: Dict[str, str] | None - Environment variables to set (optional)
-    - working_directory: str | None - Directory to run command in (optional)
 
-    Returns ExecuteCommandResponse with:
-    - success: bool - True if session was created and command started, False if failed
+    Returns OpenTerminalResponse with:
+    - success: bool - True if session was created successfully, False if failed
     - session_id: str - Unique session identifier for use with other tools
-    - command: str - Full command that was executed (including args)
+    - shell: str - Shell that was started
     - web_url: str | None - URL for web interface to view session output (if available)
+    - screen_content: str | None - Current terminal output immediately after opening
+    - timestamp: str | None - ISO timestamp when screen content was captured
     - error: str | None - Error message if operation failed (None on success)
 
     The session's web interface URL can be shared with users for direct browser access to view terminal
     output and send manual input.
 
-    IMPORTANT: For interactive programs that buffer output, use unbuffered mode.
-    Use flags like: python -u, stdbuf -o0, or program-specific unbuffered options.
-
     Agent workflow:
-    1. tercon_execute_command - Creates session and starts process
-    2. tercon_get_screen_content - Agent sees current terminal state (output or interface)
-    3. tercon_send_input - Agent sends input if process is waiting for interaction
-    4. Repeat steps 2-3 as needed (agent controls timing)
-    5. tercon_destroy_session - Clean up when finished (required for ALL sessions)
+    1. open_terminal - Creates session and returns initial screen content
+    2. send_input - Send commands or input to the terminal
+    3. get_screen_content - Check current terminal state if needed
+    4. exit_terminal - Clean up when finished (required for ALL sessions)
 
-    Use with: tercon_get_screen_content (required), tercon_send_input (if needed), tercon_list_sessions, tercon_destroy_session (required)
+    Use with: send_input, get_screen_content, list_terminal_sessions, exit_terminal
     """
     app_ctx = ctx.request_context.lifespan_context
 
     # Security validation
     if not app_ctx.security_manager.validate_tool_call(
-        "tercon_execute_command", request.model_dump()
+        "open_terminal", request.model_dump()
     ):
         raise ValueError("Security violation: Tool call rejected")
 
-    # Use the provided full command
-    full_command = request.full_command
-
     try:
-        # Create session
-        logger.info(f"Creating session for command: {full_command}")
+        # Create session with the specified shell
+        logger.info(f"Creating terminal session with shell: {request.shell}")
         session_id = await app_ctx.session_manager.create_session(
-            command=full_command,
-            timeout=request.execution_timeout,
+            command=request.shell,
+            timeout=30,  # Fixed timeout for shell startup
             environment=request.environment,
             working_directory=request.working_directory,
         )
 
-        # Get web interface URL for this session if available
-        web_url = None
-        if WEB_INTERFACE_AVAILABLE:
-            web_host = _get_display_web_host()
-            web_port = get_web_port()
-            web_url = f"http://{web_host}:{web_port}/session/{session_id}"
-            logger.info(f"Session {session_id} created. Web interface: {web_url}")
+        # Get web interface URL for this session
+        web_host = _get_display_web_host()
+        web_port = get_web_port()
+        web_url = f"http://{web_host}:{web_port}/session/{session_id}"
+        logger.info(f"Terminal session {session_id} created. Web interface: {web_url}")
 
-        return ExecuteCommandResponse(
+        # Get initial screen content
+        session = await app_ctx.session_manager.get_session(session_id)
+        screen_content = None
+        if session:
+            try:
+                screen_content = await session.get_output()
+            except Exception as e:
+                logger.warning(f"Failed to get initial screen content: {e}")
+
+        return OpenTerminalResponse(
             success=True,
             session_id=session_id,
-            command=full_command,
+            shell=request.shell,
             web_url=web_url,
+            screen_content=screen_content,
+            timestamp=datetime.now().isoformat(),
         )
 
     except Exception as e:
-        logger.error(f"Error executing command: {e}")
-        # For session creation failures, we could raise an exception instead
-        # but for now, return failure with empty session_id
-        return ExecuteCommandResponse(
+        logger.error(f"Error opening terminal: {e}")
+        return OpenTerminalResponse(
             success=False,
             session_id="",
-            command=full_command,
+            shell=request.shell,
             web_url=None,
+            timestamp=datetime.now().isoformat(),
+            error=str(e),
         )
 
 

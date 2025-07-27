@@ -142,8 +142,8 @@ class SecurityManager:
         # Validate all string inputs for basic injection attempts
         for key, value in arguments.items():
             if isinstance(value, str):
-                # Special handling for input_text in tercon_send_input - allow escape sequences
-                if tool_name == "tercon_send_input" and key == "input_text":
+                # Special handling for input_text in send_input - allow escape sequences
+                if tool_name == "send_input" and key == "input_text":
                     # Skip basic validation here - will be handled in tool-specific validation
                     continue
                 elif not self._validate_input(value):
@@ -160,23 +160,23 @@ class SecurityManager:
     ) -> bool:
         """Validate tool-specific security requirements"""
 
-        if tool_name == "tercon_execute_command":
-            return self._validate_execute_command(arguments, client_id)
-        elif tool_name == "tercon_send_input":
+        if tool_name == "open_terminal":
+            return self._validate_open_terminal(arguments, client_id)
+        elif tool_name == "send_input":
             return self._validate_send_input(arguments, client_id)
 
         return True
 
-    def _validate_execute_command(self, arguments: dict, client_id: str) -> bool:
-        """Validate execute_command specific requirements"""
+    def _validate_open_terminal(self, arguments: dict, client_id: str) -> bool:
+        """Validate open_terminal specific requirements"""
 
-        # Command validation - use full_command if present, otherwise command
-        command = arguments.get("full_command") or arguments.get("command", "")
-        if not self._validate_command(command):
+        # Shell validation - check the shell parameter
+        shell = arguments.get("shell", "")
+        if not self._validate_shell(shell):
             self._log_security_event(
-                "dangerous_command", "execute_command", {"command": command}, client_id
+                "dangerous_shell", "open_terminal", {"shell": shell}, client_id
             )
-            logger.warning(f"Blocked dangerous command: {command}")
+            logger.warning(f"Blocked dangerous shell: {shell}")
             return False
 
         # Environment variables validation
@@ -184,7 +184,7 @@ class SecurityManager:
         if env and not self._validate_environment(env):
             self._log_security_event(
                 "dangerous_environment",
-                "execute_command",
+                "open_terminal",
                 {"environment": str(env)},
                 client_id,
             )
@@ -196,7 +196,7 @@ class SecurityManager:
         if working_dir and not self._validate_path(working_dir):
             self._log_security_event(
                 "dangerous_path",
-                "execute_command",
+                "open_terminal",
                 {"working_directory": working_dir},
                 client_id,
             )
@@ -396,6 +396,64 @@ class SecurityManager:
         if first_word in dangerous_commands:
             logger.error(f"Blocked dangerous command: {first_word}")
             return False
+
+        return True
+
+    def _validate_shell(self, shell: str) -> bool:
+        """Validate shell parameter for open_terminal"""
+        if not shell or not shell.strip():
+            return False
+
+        shell_lower = shell.lower().strip()
+
+        # Allow common shells
+        allowed_shells = {
+            "bash",
+            "sh",
+            "zsh",
+            "fish",
+            "dash",
+            "ash",
+            "ksh",
+            "tcsh",
+            "csh",
+            "python3",
+            "python",
+            "/bin/bash",
+            "/bin/sh",
+            "/bin/zsh",
+            "/usr/bin/fish",
+            "/bin/dash",
+            "/usr/bin/python3",
+            "/usr/bin/python",
+        }
+
+        # Basic shell name (without full path) should be in allowed list
+        shell_name = shell_lower.split("/")[-1]  # Get just the name part
+        if shell_name not in allowed_shells and shell_lower not in allowed_shells:
+            logger.error(f"Blocked dangerous shell: {shell}")
+            return False
+
+        # Block shells with dangerous options or arguments
+        if " " in shell and not any(
+            allowed in shell_lower for allowed in allowed_shells
+        ):
+            logger.error(f"Blocked shell with arguments: {shell}")
+            return False
+
+        # Block obvious command injection attempts
+        dangerous_patterns = [
+            r"[;&|`$()]",  # Shell metacharacters
+            r"\.\.\/",  # Path traversal
+            r"rm\s",  # Dangerous commands
+            r"sudo\s",
+            r"su\s",
+        ]
+
+        for pattern in dangerous_patterns:
+            if re.search(pattern, shell_lower):
+                logger.error(f"Blocked shell with dangerous pattern: {pattern}")
+                return False
 
         return True
 
