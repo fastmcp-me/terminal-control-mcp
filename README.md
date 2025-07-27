@@ -87,8 +87,10 @@ Once installed, configure the MCP server in your AI assistant:
    claude mcp add terminal-control -s project terminal-control-mcp
    ```
 
-5. **Verify the server was added**:  
+5. **Verify the server was added**:
+   ```bash
    claude mcp list
+   ```
 
 **Note**: The MCP server will be automatically launched by Claude Code when needed \- no manual activation required.  
 **Web Interface**: When the server starts, it automatically launches a web interface (default port 8080\) where users can directly view and interact with terminal sessions through their browser. The interface is automatically configured for local or remote access based on your environment settings.
