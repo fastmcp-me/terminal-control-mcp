@@ -113,17 +113,17 @@ Once installed, configure the MCP server in your AI assistant:
    * Search for "MCP" or "Model Context Protocol"  
    * Add server configuration:
 
-```json
-{  
-  "mcp.servers": {  
-    "terminal-control": {  
-      "command": "/path/to/terminal-control-mcp/.venv/bin/python",  
-      "args": \["-m", "terminal\_control\_mcp.main"\],  
-      "cwd": "/path/to/terminal-control-mcp"  
-    }  
-  }  
-}
-```
+   ```json
+   {  
+     "mcp.servers": {  
+       "terminal-control": {  
+         "command": "/path/to/terminal-control-mcp/.venv/bin/python",  
+         "args": \["-m", "terminal\_control\_mcp.main"\],  
+         "cwd": "/path/to/terminal-control-mcp"  
+       }  
+     }  
+   }
+   ```
 
 2. **Alternative configuration using console script**:  
    ```json
