@@ -9,6 +9,7 @@ A modern MCP server built with tmux/libtmux that enables AI agents to control te
 - **🔄 Session Persistence**: Maintain long-running terminal sessions with automatic cleanup
 - **📡 Raw Stream Capture**: Direct terminal output via tmux pipe-pane for perfect synchronization
 - **🎯 Agent Control**: AI agents decide timing and interaction flow without timeouts
+- **🎛️ Precise Content Modes**: Get screen, history, since-input, or tail output for optimal agent interaction
 - **🌐 Dual Access**: Both agent (MCP) and user (web browser) can interact simultaneously
 
 ### 🌐 **Integrated Web Interface**
@@ -198,19 +199,40 @@ Terminate and cleanup a terminal session safely.
 ### 🤖 Agent-Controlled Interaction (2 tools)
 
 #### **`get_screen_content`**
-Get current terminal screen content with timestamp.
+Get terminal content with precise control over what content is returned.
+
+**Content Modes:**
+- **`"screen"`** (default) - Current visible screen only
+- **`"since_input"`** - Output since last input command  
+- **`"history"`** - Full terminal history
+- **`"tail"`** - Last N lines (requires `line_count` parameter)
 
 **Key features:**
-- Returns current terminal output visible to user
+- Flexible content retrieval for different agent needs
 - Includes ISO timestamp for agent timing decisions
 - Process running status
-- Agents decide when to wait longer based on timestamps
+- Backwards compatible (defaults to `"screen"` mode)
 
 **Agent workflow:**
-1. Call `get_screen_content` to see current terminal state
-2. Analyze screen content and timestamp
+1. Call `get_screen_content` with appropriate `content_mode`
+2. Analyze returned content and timestamp
 3. Decide whether to wait longer or take action
 4. Use `send_input` when process is ready for input
+
+**Usage examples:**
+```python
+# Get current screen (default)
+{"session_id": "abc123", "content_mode": "screen"}
+
+# Get output since last command
+{"session_id": "abc123", "content_mode": "since_input"}
+
+# Get full terminal history
+{"session_id": "abc123", "content_mode": "history"}
+
+# Get last 20 lines
+{"session_id": "abc123", "content_mode": "tail", "line_count": 20}
+```
 
 **User access**: Same content visible in web interface for direct interaction
 
@@ -559,7 +581,7 @@ terminal-control-mcp/
 - ✅ **Agent Control** - 5 MCP tools for complete session lifecycle management
 - ✅ **Security Layer** - Multi-layer input validation and audit logging
 - ✅ **Type Safety** - Full Pydantic model validation and mypy coverage
-- ✅ **Test Coverage** - 88 passing tests covering security, integration, and edge cases
+- ✅ **Test Coverage** - 94 passing tests covering security, integration, edge cases, and content modes
 - ✅ **Code Quality** - Clean architecture with black, ruff, and mypy validation
 - ✅ **Production Ready** - Reliable session management with proper cleanup
 
