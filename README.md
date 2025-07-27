@@ -60,66 +60,76 @@ pip install -e ".[dev]"
 
 Once installed, configure the MCP server in your AI assistant:
 
-## 🎯 Platform Setup
+## **🎯 Platform Setup**
 
-### 🤖 Claude Code (Anthropic)
+### **🤖 Claude Code (Anthropic)**
 
-1. **Install the package first (required for console script)**:
-   ```bash
-   # Install the package to create the console script
+1. **Install the package first (required for console script)**:  
+   \# Install the package to create the console script  
    pip install .
-   ```
 
-2. **Add the MCP server using Claude Code CLI**:
-   ```bash
-   # Recommended: User scope (available across all projects)
-   claude mcp add terminal-control -s user terminal-control-mcp
+2. **Add the MCP server using Claude Code CLI**:  
+   \# Recommended: User scope (available across all projects)  
+   claude mcp add terminal-control \-s user terminal-control-mcp
 
-   # Alternative: Local scope (default - current project only)
+   \# Alternative: Local scope (default \- current project only)  
    claude mcp add terminal-control terminal-control-mcp
 
-   # Alternative: Project scope (shared via .mcp.json in version control)
-   claude mcp add terminal-control -s project terminal-control-mcp
-   ```
+   \# Alternative: Project scope (shared via .mcp.json in version control)  
+   claude mcp add terminal-control \-s project terminal-control-mcp
 
-3. **Verify the server was added**:
-   ```bash
+3. **Verify the server was added**:  
    claude mcp list
-   ```
 
-**Note**: The MCP server will be automatically launched by Claude Code when needed - no manual activation required.
+**Note**: The MCP server will be automatically launched by Claude Code when needed \- no manual activation required.  
+**Web Interface**: When the server starts, it automatically launches a web interface (default port 8080\) where users can directly view and interact with terminal sessions through their browser. The interface is automatically configured for local or remote access based on your environment settings.
 
-**Web Interface**: When the server starts, it automatically launches a web interface (default port 8080) where users can directly view and interact with terminal sessions through their browser. The interface is automatically configured for local or remote access based on your environment settings.
+### **♊ Gemini CLI (Google)**
 
-### 🔧 Visual Studio Code with GitHub Copilot
-
-1. **Configure in VS Code settings** (MCP extension or built-in support):
-   - Open **Settings** (`Ctrl+,` or `Cmd+,`)
-   - Search for "MCP" or "Model Context Protocol"
-   - Add server configuration:
-   ```json
-   {
-     "mcp.servers": {
-       "terminal-control": {
-         "command": "/path/to/terminal-control-mcp/.venv/bin/python",
-         "args": ["-m", "terminal_control_mcp.main"],
-         "cwd": "/path/to/terminal-control-mcp"
-       }
-     }
+1. **Configure in settings.json**: Open your Gemini settings file. This can be the global file (\~/.gemini/settings.json) or a project-specific file (.gemini/settings.json).  
+2. **Add the server configuration**: Add the following JSON block to the mcpServers object. You will need to replace "/path/to/terminal-control-mcp/.venv/bin/terminal-control-mcp" and "/path/to/terminal-control-mcp" with the actual absolute paths on your system.  
+   {  
+     "mcpServers": {  
+       "terminal-control": {  
+         "command": "/path/to/terminal-control-mcp/.venv/bin/terminal-control-mcp",  
+         "cwd": "/path/to/terminal-control-mcp",  
+         "trust": false,  
+         "timeout": 60000  
+       }  
+     }  
    }
-   ```
 
-2. **Alternative configuration using console script**:
-   ```json
-   {
-     "mcp.servers": {
-       "terminal-control": {
-         "command": "/path/to/terminal-control-mcp/.venv/bin/terminal-control-mcp",
-         "cwd": "/path/to/terminal-control-mcp"
-       }
-     }
+3. **Verify the server is discovered**: Run the /mcp command in the Gemini CLI to ensure it connects to the server successfully.  
+   /mcp
+
+**Note**: The Gemini CLI will automatically launch the MCP server as a background process when it starts.
+
+### **🔧 Visual Studio Code with GitHub Copilot**
+
+1. **Configure in VS Code settings** (MCP extension or built-in support):  
+   * Open **Settings** (Ctrl+, or Cmd+,)  
+   * Search for "MCP" or "Model Context Protocol"  
+   * Add server configuration:
+
+{  
+  "mcp.servers": {  
+    "terminal-control": {  
+      "command": "/path/to/terminal-control-mcp/.venv/bin/python",  
+      "args": \["-m", "terminal\_control\_mcp.main"\],  
+      "cwd": "/path/to/terminal-control-mcp"  
+    }  
+  }  
+}
+
+2. **Alternative configuration using console script**:  
+   {  
+     "mcp.servers": {  
+       "terminal-control": {  
+         "command": "/path/to/terminal-control-mcp/.venv/bin/terminal-control-mcp",  
+         "cwd": "/path/to/terminal-control-mcp"  
+       }  
+     }  
    }
-   ```
 
 3. **Reload VS Code** to apply the configuration
 
