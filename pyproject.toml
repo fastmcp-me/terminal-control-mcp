@@ -50,6 +50,7 @@ dev = [
     "ruff>=0.1.0",
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
+    "vulture>=2.3"
 ]
 
 [project.urls]
@@ -145,3 +146,11 @@ max-complexity = 10
 [tool.ruff.lint.pylint]
 # Set maximum number of statements in a function
 max-statements = 20
+
+[tool.vulture]
+# Scan your source code directory
+paths = ["src"]
+# Minimum confidence level to report (0-100). 80 is a good starting point.
+min_confidence = 80
+# Ignore names that Vulture may falsely flag (like script entry points)
+ignore_names = ["main_sync"]

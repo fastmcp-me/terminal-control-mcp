@@ -80,7 +80,7 @@ class TestMCPIntegration:
         """Test that dangerous commands are blocked by security"""
         # Only test commands that are actually blocked by send_input validation
         dangerous_input_commands = ["sudo rm -rf /", "su - root", "passwd"]
-        
+
         for command in dangerous_input_commands:
             # Create terminal first
             request = OpenTerminalRequest(shell="bash")

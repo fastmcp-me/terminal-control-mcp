@@ -33,7 +33,6 @@ class InteractiveSession:
 
         # Terminal output stream file for web interface
         self.output_stream_file = Path(f"/tmp/tmux_stream_{session_id}.log")
-        self.stream_position = 0  # Track position for incremental reads
 
         self.is_active = False
         self.exit_code: int | None = None
@@ -240,23 +239,6 @@ class InteractiveSession:
 
         return clean_output
 
-    async def get_stream_output(self) -> str:
-        """Get incremental raw terminal stream output for web interface"""
-        if not self.is_active or not self.output_stream_file.exists():
-            return ""
-
-        try:
-            # Read new content from stream file
-            with open(self.output_stream_file, "rb") as f:
-                f.seek(self.stream_position)
-                new_data = f.read()
-                self.stream_position = f.tell()
-
-            return new_data.decode("utf-8", errors="replace")
-
-        except Exception as e:
-            logger.debug(f"Error reading stream output: {e}")
-            return ""
 
     async def terminate(self) -> None:
         """Terminate the tmux session using libtmux"""

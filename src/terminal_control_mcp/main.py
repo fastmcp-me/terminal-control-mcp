@@ -429,7 +429,12 @@ async def send_input(request: SendInputRequest, ctx: Context) -> SendInputRespon
     session = await app_ctx.session_manager.get_session(request.session_id)
     if not session:
         return SendInputResponse(
-            success=False, session_id=request.session_id, message="Session not found"
+            success=False,
+            session_id=request.session_id,
+            message="Session not found",
+            screen_content=None,
+            timestamp=None,
+            process_running=None,
         )
 
     try:
@@ -445,10 +450,22 @@ async def send_input(request: SendInputRequest, ctx: Context) -> SendInputRespon
                 await session.send_input(request.input_text)
         else:
             await session.send_input(request.input_text)
+
+        # Give a moment for the command to process and update the terminal
+        await asyncio.sleep(0.1)
+
+        # Capture current screen content after input
+        screen_content = await session.get_raw_output()
+        timestamp = datetime.now().isoformat()
+        process_running = session.is_process_alive()
+
         return SendInputResponse(
             success=True,
             session_id=request.session_id,
             message=f"Input sent successfully: '{request.input_text}'",
+            screen_content=screen_content,
+            timestamp=timestamp,
+            process_running=process_running,
         )
     except Exception as e:
         logger.warning(f"Failed to send input to session {request.session_id}: {e}")
@@ -456,6 +473,9 @@ async def send_input(request: SendInputRequest, ctx: Context) -> SendInputRespon
             success=False,
             session_id=request.session_id,
             message="Failed to send input",
+            screen_content=None,
+            timestamp=None,
+            process_running=None,
             error=str(e),
         )
 

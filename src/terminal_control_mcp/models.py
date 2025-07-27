@@ -74,6 +74,15 @@ class SendInputResponse(BaseModel):
     success: bool
     session_id: str
     message: str
+    screen_content: str | None = Field(
+        None, description="Current terminal screen content after input"
+    )
+    timestamp: str | None = Field(
+        None, description="Timestamp when screen content was captured"
+    )
+    process_running: bool | None = Field(
+        None, description="Whether the process is still running"
+    )
     error: str | None = None
 
 
@@ -89,20 +98,6 @@ class EnvironmentConfig:
     @classmethod
     def from_dict(cls, env_dict: dict[str, str]) -> "EnvironmentConfig":
         return cls(variables=env_dict)
-
-
-class ExecuteCommandRequest(BaseModel):
-    """Request to execute a command and create a session"""
-
-    full_command: str = Field(description="Complete shell command string to execute")
-    execution_timeout: int = Field(
-        30,
-        description="Timeout in seconds for process startup (agents control interaction timing)",
-    )
-    environment: dict[str, str] | None = Field(
-        None, description="Environment variables"
-    )
-    working_directory: str | None = Field(None, description="Working directory")
 
 
 @dataclass
@@ -121,18 +116,6 @@ class LogEventData:
             "relative_time": self.relative_time,
             "data": self.data,
         }
-
-
-class ExecuteCommandResponse(BaseModel):
-    """Response from command execution"""
-
-    success: bool
-    session_id: str
-    command: str
-    web_url: str | None = Field(
-        None, description="Web interface URL for direct browser access to this session"
-    )
-    error: str | None = None
 
 
 class OpenTerminalRequest(BaseModel):

@@ -18,8 +18,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from src.terminal_control_mcp.main import (
     exit_terminal,
-    open_terminal,
     get_screen_content,
+    open_terminal,
     send_input,
 )
 from src.terminal_control_mcp.models import OpenTerminalRequest
@@ -351,10 +351,8 @@ class TestAsyncEdgeCases:
 
         try:
             # Create multiple sessions rapidly
-            for i in range(5):
-                request = OpenTerminalRequest(
-                    shell="bash", execution_timeout=30
-                )
+            for _ in range(5):
+                request = OpenTerminalRequest(shell="bash", execution_timeout=30)
                 result = await open_terminal(request, mock_context)
                 if result.success:
                     session_ids.append(result.session_id)
@@ -396,7 +394,7 @@ class TestAsyncEdgeCases:
         if result.success:
             # Send a sleep command that would timeout
             from src.terminal_control_mcp.models import SendInputRequest
-            
+
             input_request = SendInputRequest(
                 session_id=result.session_id, input_text="sleep 10"
             )
@@ -412,9 +410,7 @@ class TestAsyncEdgeCases:
     async def test_concurrent_operations_same_session(self, mock_context):
         """Test concurrent operations on the same session"""
         # Start a session
-        request = OpenTerminalRequest(
-            shell="python3", execution_timeout=30
-        )
+        request = OpenTerminalRequest(shell="python3", execution_timeout=30)
         result = await open_terminal(request, mock_context)
 
         if not result.success:
@@ -425,9 +421,10 @@ class TestAsyncEdgeCases:
         try:
             # Send a Python command that waits for input
             from src.terminal_control_mcp.models import SendInputRequest
-            
+
             input_request = SendInputRequest(
-                session_id=session_id, input_text="import time; input('wait: '); print('done')"
+                session_id=session_id,
+                input_text="import time; input('wait: '); print('done')",
             )
             await send_input(input_request, mock_context)
 
