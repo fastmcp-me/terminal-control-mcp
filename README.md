@@ -87,7 +87,8 @@ Once installed, configure the MCP server in your AI assistant:
 ### **♊ Gemini CLI (Google)**
 
 1. **Configure in settings.json**: Open your Gemini settings file. This can be the global file (\~/.gemini/settings.json) or a project-specific file (.gemini/settings.json).  
-2. **Add the server configuration**: Add the following JSON block to the mcpServers object. You will need to replace "/path/to/terminal-control-mcp/.venv/bin/terminal-control-mcp" and "/path/to/terminal-control-mcp" with the actual absolute paths on your system.  
+2. **Add the server configuration**: Add the following JSON block to the mcpServers object. You will need to replace "/path/to/terminal-control-mcp/.venv/bin/terminal-control-mcp" and "/path/to/terminal-control-mcp" with the actual absolute paths on your system.
+   ```json
    {  
      "mcpServers": {  
        "terminal-control": {  
@@ -98,8 +99,9 @@ Once installed, configure the MCP server in your AI assistant:
        }  
      }  
    }
+   ```
 
-3. **Verify the server is discovered**: Run the /mcp command in the Gemini CLI to ensure it connects to the server successfully.  
+4. **Verify the server is discovered**: Run the /mcp command in the Gemini CLI to ensure it connects to the server successfully.  
    /mcp
 
 **Note**: The Gemini CLI will automatically launch the MCP server as a background process when it starts.
@@ -111,6 +113,7 @@ Once installed, configure the MCP server in your AI assistant:
    * Search for "MCP" or "Model Context Protocol"  
    * Add server configuration:
 
+```json
 {  
   "mcp.servers": {  
     "terminal-control": {  
@@ -120,8 +123,10 @@ Once installed, configure the MCP server in your AI assistant:
     }  
   }  
 }
+```
 
 2. **Alternative configuration using console script**:  
+   ```json
    {  
      "mcp.servers": {  
        "terminal-control": {  
@@ -130,6 +135,7 @@ Once installed, configure the MCP server in your AI assistant:
        }  
      }  
    }
+   ```
 
 3. **Reload VS Code** to apply the configuration
 
