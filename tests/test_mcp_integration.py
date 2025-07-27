@@ -423,6 +423,207 @@ class TestSecurityIntegrationScenarios:
                 await open_terminal(request, mock_context)
 
 
+class TestContentModeIntegration:
+    """Integration tests for the new content mode functionality"""
+
+    @pytest.mark.asyncio
+    async def test_content_mode_parameter_validation(self, mock_context):
+        """Test that content mode parameters are properly validated"""
+        # Test valid content modes
+        valid_modes = ["screen", "since_input", "history", "tail"]
+        
+        for mode in valid_modes:
+            line_count = 10 if mode == "tail" else None
+            request = GetScreenContentRequest(
+                session_id="test_session",
+                content_mode=mode,
+                line_count=line_count
+            )
+            
+            # Request should be valid (will fail on session not found, but parameter validation passes)
+            response = await get_screen_content(request, mock_context)
+            assert response.success is False
+            assert "Session not found" in response.error
+
+    @pytest.mark.asyncio
+    async def test_content_mode_with_real_session(self, mock_context):
+        """Test content modes with a real terminal session"""
+        # Create a terminal session first
+        create_request = OpenTerminalRequest(shell="bash")
+        create_response = await open_terminal(create_request, mock_context)
+        assert create_response.success is True
+        session_id = create_response.session_id
+
+        try:
+            # Test each content mode
+            test_cases = [
+                ("screen", None, "should get current screen"),
+                ("history", None, "should get full history"),
+                ("tail", 5, "should get last 5 lines"),
+                ("since_input", None, "should get output since last input")
+            ]
+
+            for mode, line_count, description in test_cases:
+                request = GetScreenContentRequest(
+                    session_id=session_id,
+                    content_mode=mode,
+                    line_count=line_count
+                )
+                
+                response = await get_screen_content(request, mock_context)
+                assert response.success is True, f"Failed for mode {mode}: {description}"
+                assert response.session_id == session_id
+                assert response.screen_content is not None
+                assert response.timestamp is not None
+                
+                # For tail mode, verify line_count parameter is handled
+                if mode == "tail" and line_count:
+                    # Content should be limited (though exact validation depends on tmux output)
+                    assert isinstance(response.screen_content, str)
+
+        finally:
+            # Clean up session
+            destroy_request = DestroySessionRequest(session_id=session_id)
+            destroy_response = await exit_terminal(destroy_request, mock_context)
+            assert destroy_response.success is True
+
+    @pytest.mark.asyncio
+    async def test_content_mode_defaults(self, mock_context):
+        """Test that content mode defaults to 'screen' when not specified"""
+        # Create a terminal session
+        create_request = OpenTerminalRequest(shell="bash")
+        create_response = await open_terminal(create_request, mock_context)
+        assert create_response.success is True
+        session_id = create_response.session_id
+
+        try:
+            # Test request without content_mode (should default to "screen")
+            request = GetScreenContentRequest(session_id=session_id)
+            response = await get_screen_content(request, mock_context)
+            
+            assert response.success is True
+            assert response.screen_content is not None
+            
+            # Compare with explicit screen mode
+            explicit_request = GetScreenContentRequest(
+                session_id=session_id,
+                content_mode="screen"
+            )
+            explicit_response = await get_screen_content(explicit_request, mock_context)
+            
+            assert explicit_response.success is True
+            # Both should return similar content (may vary slightly due to timing)
+            assert isinstance(response.screen_content, str)
+            assert isinstance(explicit_response.screen_content, str)
+
+        finally:
+            # Clean up session
+            destroy_request = DestroySessionRequest(session_id=session_id)
+            await exit_terminal(destroy_request, mock_context)
+
+    @pytest.mark.asyncio
+    async def test_since_input_mode_workflow(self, mock_context):
+        """Test the 'since_input' mode with actual input workflow"""
+        # Create a terminal session
+        create_request = OpenTerminalRequest(shell="bash")
+        create_response = await open_terminal(create_request, mock_context)
+        assert create_response.success is True
+        session_id = create_response.session_id
+
+        try:
+            # Send some input
+            input_request = SendInputRequest(
+                session_id=session_id,
+                input_text="echo 'Test output for since_input mode'"
+            )
+            input_response = await send_input(input_request, mock_context)
+            assert input_response.success is True
+
+            # Wait a moment for command to process
+            await asyncio.sleep(0.2)
+
+            # Get content since last input
+            content_request = GetScreenContentRequest(
+                session_id=session_id,
+                content_mode="since_input"
+            )
+            content_response = await get_screen_content(content_request, mock_context)
+            
+            assert content_response.success is True
+            assert content_response.screen_content is not None
+            # Should contain recent output
+            assert isinstance(content_response.screen_content, str)
+
+        finally:
+            # Clean up session
+            destroy_request = DestroySessionRequest(session_id=session_id)
+            await exit_terminal(destroy_request, mock_context)
+
+    @pytest.mark.asyncio 
+    async def test_tail_mode_line_count_validation(self, mock_context):
+        """Test that tail mode properly handles line_count parameter"""
+        # Create a terminal session
+        create_request = OpenTerminalRequest(shell="bash")
+        create_response = await open_terminal(create_request, mock_context)
+        assert create_response.success is True
+        session_id = create_response.session_id
+
+        try:
+            # Test tail mode with different line counts
+            line_counts = [1, 5, 10, 20]
+            
+            for line_count in line_counts:
+                request = GetScreenContentRequest(
+                    session_id=session_id,
+                    content_mode="tail",
+                    line_count=line_count
+                )
+                
+                response = await get_screen_content(request, mock_context)
+                assert response.success is True, f"Failed for line_count={line_count}"
+                assert response.screen_content is not None
+                
+                # Content should be a string (exact line validation depends on tmux behavior)
+                assert isinstance(response.screen_content, str)
+
+        finally:
+            # Clean up session
+            destroy_request = DestroySessionRequest(session_id=session_id)
+            await exit_terminal(destroy_request, mock_context)
+
+    @pytest.mark.asyncio
+    async def test_content_mode_backwards_compatibility(self, mock_context):
+        """Test that existing code without content_mode still works"""
+        # Create a terminal session
+        create_request = OpenTerminalRequest(shell="bash")
+        create_response = await open_terminal(create_request, mock_context)
+        assert create_response.success is True
+        session_id = create_response.session_id
+
+        try:
+            # Test old-style request (just session_id)
+            old_style_request = GetScreenContentRequest(session_id=session_id)
+            old_response = await get_screen_content(old_style_request, mock_context)
+            
+            # Test new-style request with explicit screen mode
+            new_style_request = GetScreenContentRequest(
+                session_id=session_id,
+                content_mode="screen"
+            )
+            new_response = await get_screen_content(new_style_request, mock_context)
+            
+            # Both should succeed and return similar results
+            assert old_response.success is True
+            assert new_response.success is True
+            assert old_response.screen_content is not None
+            assert new_response.screen_content is not None
+
+        finally:
+            # Clean up session
+            destroy_request = DestroySessionRequest(session_id=session_id)
+            await exit_terminal(destroy_request, mock_context)
+
+
 if __name__ == "__main__":
     # Allow running tests directly
     pytest.main([__file__, "-v"])

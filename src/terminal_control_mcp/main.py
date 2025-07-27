@@ -176,30 +176,14 @@ mcp = FastMCP("Terminal Control", lifespan=app_lifespan)
 # Session Management Tools
 @mcp.tool()
 async def list_terminal_sessions(ctx: Context) -> ListSessionsResponse:
-    """Show all currently running terminal sessions
-
-    Use this when users ask "list my sessions", "what sessions are running", "show active sessions",
-    "what terminals are open", or to find session IDs for other operations.
-
-    Shows session information including IDs, commands, states, and timestamps.
-    Use this to monitor workflows, debug issues, and get session IDs for other tools.
+    """Show all active terminal sessions
 
     No parameters required.
 
     Returns ListSessionsResponse with:
     - success: bool - Operation success status
-    - sessions: List[SessionInfo] - List of active sessions
-      - session_id: str - Unique session identifier for use with other tools
-      - command: str - Original command that was executed
-      - state: str - Current session state
-      - created_at: float - Unix timestamp when session was created
-      - last_activity: float - Unix timestamp of last activity
-    - total_sessions: int - Total number of active sessions (max 50 concurrent)
-
-    Web interface URLs for each session are logged and can be shared with users for direct
-    browser access to view terminal output and send manual input. The URLs are automatically
-    configured based on the server's network settings and can be customized via environment
-    variables for remote access.
+    - sessions: List[SessionInfo] - List of active sessions with session_id, command, state, timestamps
+    - total_sessions: int - Total number of active sessions (max 50)
 
     Use with: get_screen_content, send_input, exit_terminal
     """
@@ -244,25 +228,15 @@ async def exit_terminal(
 ) -> DestroySessionResponse:
     """Close and clean up a terminal session
 
-    Use this when users ask to "close", "stop", "terminate", "kill", "exit", "end", or "clean up" a session.
-    Examples: "close that session", "stop the debugger", "clean up when done", "exit that program".
-
-    Properly closes a session and frees up resources.
-
     Parameters (DestroySessionRequest):
-    - session_id: str - ID of the session to destroy (from list_terminal_sessions or open_terminal)
+    - session_id: str - ID of the session to destroy
 
     Returns DestroySessionResponse with:
-    - success: bool - True if session was found and destroyed, False if not found
+    - success: bool - True if session was found and destroyed
     - session_id: str - Echo of the requested session ID
     - message: str - "Session destroyed" or "Session not found"
 
-    Use this to:
-    - Clean up finished automation sessions
-    - Force-close unresponsive sessions
-    - Free up session slots (max 50 concurrent)
-
-    IMPORTANT: Only destroy sessions when the user explicitly requests it or when the session is no longer needed.
+    Use with: open_terminal, get_screen_content, send_input, list_terminal_sessions
     """
     app_ctx = ctx.request_context.lifespan_context
 
@@ -279,37 +253,26 @@ async def exit_terminal(
 async def get_screen_content(
     request: GetScreenContentRequest, ctx: Context
 ) -> GetScreenContentResponse:
-    """See what's currently displayed in a terminal session
-
-    Use this when users ask "what's on screen", "show me the output", "what's currently showing",
-    "what do you see", or to check the current state of a terminal.
-
-    Returns the current terminal output visible to the user. This allows the agent
-    to see what's currently on screen and decide what to do next.
+    """Get terminal content from a session with precise control over what content is returned
 
     Parameters (GetScreenContentRequest):
-    - session_id: str - ID of the session to get screen content from (from open_terminal or list_terminal_sessions)
+    - session_id: str - Session ID (from open_terminal or list_terminal_sessions)
+    - content_mode: "screen" | "since_input" | "history" | "tail" - Content retrieval mode (default: "screen")
+      * "screen": Current visible screen only (default)
+      * "since_input": Output since last input command
+      * "history": Full terminal history
+      * "tail": Last N lines (requires line_count)
+    - line_count: int | None - Number of lines for "tail" mode (ignored for other modes)
 
     Returns GetScreenContentResponse with:
     - success: bool - Operation success status
     - session_id: str - Echo of the requested session ID
-    - process_running: bool - True if process is still active, False if terminated
-    - screen_content: str | None - Current terminal output (None if error)
-    - timestamp: str - ISO timestamp when screen content was captured
+    - process_running: bool - Whether process is still active
+    - screen_content: str | None - Terminal content based on content_mode
+    - timestamp: str - ISO timestamp when content was captured
     - error: str | None - Error message if operation failed
 
-    The session's web interface URL is logged for user access to view the same content
-    in their browser and send manual input. The URL adapts to the server's network
-    configuration for both local and remote access scenarios.
-
-    Use this tool to:
-    - Check what's currently displayed in the terminal
-    - See if a process is waiting for input
-    - Monitor progress of long-running commands
-    - Debug interactive program behavior
-    - Get timing information for agent decision-making
-
-    Use with: open_terminal (to get session_id), send_input (when ready for input)
+    Use with: open_terminal, send_input, list_terminal_sessions, exit_terminal
     """
     app_ctx = ctx.request_context.lifespan_context
 
@@ -324,15 +287,17 @@ async def get_screen_content(
         )
 
     try:
-        # Use xterm.js buffer as source of truth if web server is available
-        if app_ctx.web_server and app_ctx.web_server.is_xterm_active(
-            request.session_id
-        ):
+        # Use xterm.js buffer as source of truth if web server is available and using default mode
+        if (app_ctx.web_server and app_ctx.web_server.is_xterm_active(request.session_id)
+            and request.content_mode == "screen"):
             screen_content = await app_ctx.web_server.mcp_get_screen_content(
                 request.session_id
             )
         else:
-            screen_content = await session.get_output()
+            # Use session's content retrieval methods based on mode
+            screen_content = await session.get_content_by_mode(
+                request.content_mode, request.line_count
+            )
         process_running = session.is_process_alive()
         timestamp = datetime.now().isoformat()
 
@@ -365,58 +330,22 @@ async def get_screen_content(
 
 @mcp.tool()
 async def send_input(request: SendInputRequest, ctx: Context) -> SendInputResponse:
-    """Type commands or input into an interactive terminal session
-
-    Use this when users ask to "type", "send", "enter", "input", "respond", "answer", or "press" something.
-    Examples: "type 'ls -la'", "send 'print(2+2)'", "enter my password", "respond 'yes'", "press Enter".
-
-    Sends text input to the running process in the specified session.
-    Use this when the agent determines the process is ready for input.
+    """Send input/commands to an interactive terminal session
 
     Parameters (SendInputRequest):
-    - session_id: str - ID of the session to send input to (from open_terminal or list_terminal_sessions)
-    - input_text: str - Text to send to the process (supports escape sequences for keyboard shortcuts)
-
-    Keyboard Shortcuts & Escape Sequences Support:
-    The input_text parameter supports terminal escape sequences for sending keyboard shortcuts:
-
-    Control Characters (Ctrl+Key):
-    - "\\x03" - Ctrl+C (interrupt/SIGINT)
-    - "\\x04" - Ctrl+D (EOF)
-    - "\\x08" - Ctrl+H (backspace)
-    - "\\x09" - Tab
-    - "\\x0a" - Enter/Line Feed
-    - "\\x0d" - Carriage Return
-    - "\\x1a" - Ctrl+Z (suspend)
-    - "\\x1b" - Escape key
-
-    Arrow Keys:
-    - "\\x1b[A" - Up arrow
-    - "\\x1b[B" - Down arrow
-    - "\\x1b[C" - Right arrow
-    - "\\x1b[D" - Left arrow
-
-    Function Keys:
-    - "\\x1bOP" - F1
-    - "\\x1bOQ" - F2
-    - "\\x1b[15~" - F5
-    - "\\x1b[17~" - F6
-    (F3-F12 and other special keys supported)
+    - session_id: str - Session ID to send input to
+    - input_text: str - Text to send (supports escape sequences: \\x03=Ctrl+C, \\x0a=Enter, \\x1b[A=Up arrow, etc.)
 
     Returns SendInputResponse with:
-    - success: bool - True if input was sent successfully, False if failed
+    - success: bool - True if input was sent successfully
     - session_id: str - Echo of the requested session ID
-    - message: str - Confirmation message with echoed input text
-    - error: str | None - Error message if operation failed (None on success)
+    - message: str - Confirmation message
+    - screen_content: str | None - Terminal content after input
+    - timestamp: str | None - When content was captured
+    - process_running: bool | None - Whether process is still active
+    - error: str | None - Error message if operation failed
 
-    Use this tool to:
-    - Respond to prompts in interactive programs
-    - Enter commands in shells or REPL environments
-    - Provide input when programs are waiting for user response
-    - Send keyboard shortcuts to debuggers, editors, and interactive programs
-    - Navigate menus and interfaces using arrow keys and function keys
-
-    Use this tool to send commands, respond to prompts, or provide input to running processes.
+    Use with: open_terminal, get_screen_content, list_terminal_sessions, exit_terminal
     """
     app_ctx = ctx.request_context.lifespan_context
 
@@ -485,36 +414,21 @@ async def send_input(request: SendInputRequest, ctx: Context) -> SendInputRespon
 async def open_terminal(
     request: OpenTerminalRequest, ctx: Context
 ) -> OpenTerminalResponse:
-    """Open a new terminal session with a specified shell
-
-    Use this when users ask to "open a terminal", "start a shell", "open bash", "create a new session".
-    Examples: "open a terminal", "start a bash session", "create a new terminal with zsh".
-
-    Creates a new terminal session with the specified shell and automatically returns the current
-    screen content. The terminal is ready for interactive use immediately.
+    """Open a new terminal session with specified shell
 
     Parameters (OpenTerminalRequest):
     - shell: str - Shell to use (bash, zsh, fish, sh, etc.) - defaults to "bash"
-    - working_directory: str | None - Directory to start the terminal in (optional)
+    - working_directory: str | None - Directory to start terminal in (optional)
     - environment: Dict[str, str] | None - Environment variables to set (optional)
 
     Returns OpenTerminalResponse with:
-    - success: bool - True if session was created successfully, False if failed
-    - session_id: str - Unique session identifier for use with other tools
+    - success: bool - True if session was created successfully
+    - session_id: str - Unique session identifier for other tools
     - shell: str - Shell that was started
-    - web_url: str | None - URL for web interface to view session output (if available)
-    - screen_content: str | None - Current terminal output immediately after opening
-    - timestamp: str | None - ISO timestamp when screen content was captured
-    - error: str | None - Error message if operation failed (None on success)
-
-    The session's web interface URL can be shared with users for direct browser access to view terminal
-    output and send manual input.
-
-    Agent workflow:
-    1. open_terminal - Creates session and returns initial screen content
-    2. send_input - Send commands or input to the terminal
-    3. get_screen_content - Check current terminal state if needed
-    4. exit_terminal - Clean up when finished (required for ALL sessions)
+    - web_url: str | None - URL for web interface access
+    - screen_content: str | None - Initial terminal output
+    - timestamp: str | None - ISO timestamp when content was captured
+    - error: str | None - Error message if operation failed
 
     Use with: send_input, get_screen_content, list_terminal_sessions, exit_terminal
     """

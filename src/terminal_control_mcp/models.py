@@ -5,7 +5,7 @@ Pydantic models for Interactive Automation MCP Server
 
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -43,9 +43,17 @@ class DestroySessionResponse(BaseModel):
 
 
 class GetScreenContentRequest(BaseModel):
-    """Request to get current screen content from a session"""
+    """Request to get terminal content from a session"""
 
-    session_id: str = Field(description="ID of the session to get screen content from")
+    session_id: str = Field(description="ID of the session to get content from")
+    content_mode: Literal["screen", "since_input", "history", "tail"] = Field(
+        "screen",
+        description="Content mode: 'screen' (current visible screen), 'since_input' (output since last input), 'history' (full terminal history), 'tail' (last N lines)"
+    )
+    line_count: int | None = Field(
+        None,
+        description="Number of lines for 'tail' mode (ignored for other modes)"
+    )
 
 
 class GetScreenContentResponse(BaseModel):

@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -45,6 +46,9 @@ class InteractiveSession:
 
         # Interaction logging
         self.interaction_logger = InteractionLogger(session_id)
+
+        # Track last input timestamp for "since_input" mode
+        self.last_input_timestamp: float = 0
 
     async def initialize(self) -> None:
         """Initialize the tmux session using libtmux"""
@@ -184,6 +188,9 @@ class InteractiveSession:
             raise RuntimeError("Session is not active")
 
         try:
+            # Update timestamp for "since_input" mode
+            self.last_input_timestamp = time.time()
+
             # Log input
             self.interaction_logger.log_input_sent(input_text, "tmux_input")
 
@@ -239,6 +246,100 @@ class InteractiveSession:
 
         return clean_output
 
+    async def get_screen_only(self) -> str:
+        """Get only current visible screen content (no history)"""
+        if not self.is_active or not self.tmux_pane:
+            return ""
+
+        try:
+            loop = asyncio.get_event_loop()
+            tmux_pane = self.tmux_pane
+            content = await loop.run_in_executor(
+                None, lambda: tmux_pane.cmd("capture-pane", "-e", "-p")
+            )
+
+            if hasattr(content, "stdout"):
+                raw_output = str(content.stdout)
+            elif isinstance(content, list) and len(content) > 0:
+                raw_output = "\n".join(str(line) for line in content)
+            else:
+                raw_output = str(content) if content else ""
+
+            # Remove ANSI escape sequences
+            import re
+            ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+            return ansi_escape.sub("", raw_output)
+
+        except Exception as e:
+            logger.debug(f"Error getting screen-only output: {e}")
+            return ""
+
+    async def get_output_since_timestamp(self, since_timestamp: float) -> str:
+        """Get output since specific timestamp (approximated using stream file)"""
+        if not self.is_active or not self.output_stream_file.exists():
+            return ""
+
+        try:
+            # For simplicity, return recent output from stream file
+            # This is an approximation since tmux doesn't have timestamp-based history
+            with open(self.output_stream_file) as f:
+                content = f.read()
+
+            # Remove ANSI escape sequences
+            import re
+            ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+            clean_content = ansi_escape.sub("", content)
+
+            # For now, return last APPROX_LINES_SINCE_INPUT lines as approximation
+            APPROX_LINES_SINCE_INPUT = 50
+            lines = clean_content.split('\n')
+            return '\n'.join(lines[-APPROX_LINES_SINCE_INPUT:]) if len(lines) > APPROX_LINES_SINCE_INPUT else clean_content
+
+        except Exception as e:
+            logger.debug(f"Error getting output since timestamp: {e}")
+            return ""
+
+    async def get_tail_output(self, line_count: int) -> str:
+        """Get last N lines of terminal output"""
+        if not self.is_active or not self.tmux_pane:
+            return ""
+
+        try:
+            loop = asyncio.get_event_loop()
+            tmux_pane = self.tmux_pane
+            content = await loop.run_in_executor(
+                None, lambda: tmux_pane.cmd("capture-pane", "-e", "-S", f"-{line_count}", "-p")
+            )
+
+            if hasattr(content, "stdout"):
+                raw_output = str(content.stdout)
+            elif isinstance(content, list) and len(content) > 0:
+                raw_output = "\n".join(str(line) for line in content)
+            else:
+                raw_output = str(content) if content else ""
+
+            # Remove ANSI escape sequences
+            import re
+            ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+            return ansi_escape.sub("", raw_output)
+
+        except Exception as e:
+            logger.debug(f"Error getting tail output: {e}")
+            return ""
+
+    async def get_content_by_mode(self, content_mode: str, line_count: int | None = None) -> str:
+        """Get terminal content based on the specified mode"""
+        if content_mode == "screen":
+            return await self.get_screen_only()
+        elif content_mode == "since_input":
+            return await self.get_output_since_timestamp(self.last_input_timestamp)
+        elif content_mode == "history":
+            return await self.get_output()  # Full history
+        elif content_mode == "tail" and line_count:
+            return await self.get_tail_output(line_count)
+        else:
+            # Default to screen mode
+            return await self.get_screen_only()
 
     async def terminate(self) -> None:
         """Terminate the tmux session using libtmux"""

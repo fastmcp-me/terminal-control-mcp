@@ -287,7 +287,7 @@ class WebServer:
         """Poll tmux session for new stream output and send incremental data to websocket"""
         # Each WebSocket connection tracks its own stream position for proper history restoration
         websocket_stream_position = 0
-        
+
         try:
             # First, send all existing content to restore session history
             if session.output_stream_file.exists():
@@ -295,14 +295,14 @@ class WebServer:
                     with open(session.output_stream_file, "rb") as f:
                         historical_data = f.read()
                         websocket_stream_position = f.tell()
-                    
+
                     if historical_data:
                         historical_content = historical_data.decode("utf-8", errors="replace")
                         await websocket.send_text(historical_content)
                         logger.debug(f"Restored {len(historical_content)} chars of history for session {session_id}")
                 except Exception as e:
                     logger.debug(f"Error restoring historical content: {e}")
-            
+
             # Then poll for incremental updates
             while True:
                 await asyncio.sleep(0.05)  # Poll every 50ms for responsiveness
@@ -314,7 +314,7 @@ class WebServer:
                             f.seek(websocket_stream_position)
                             new_data = f.read()
                             websocket_stream_position = f.tell()
-                        
+
                         if new_data:
                             new_stream_data = new_data.decode("utf-8", errors="replace")
                             # Send incremental stream data directly to xterm.js
