@@ -67,24 +67,24 @@ Once installed, configure the MCP server in your AI assistant:
 
 1. **Install the package first (required for console script)**:
    ```bash
-   \# Install the package to create the console script  
+   # Install the package to create the console script  
    pip install .
    ```
 
 3. **Add the MCP server using Claude Code CLI**:
    ```bash
-   \# Recommended: User scope (available across all projects)  
-   claude mcp add terminal-control \-s user terminal-control-mcp
+   # Recommended: User scope (available across all projects)  
+   claude mcp add terminal-control -s user terminal-control-mcp
    ```
 
    ```bash
-   \# Alternative: Local scope (default \- current project only)  
+   # Alternative: Local scope (default - current project only)  
    claude mcp add terminal-control terminal-control-mcp
    ```
 
    ```bash
-   \# Alternative: Project scope (shared via .mcp.json in version control)  
-   claude mcp add terminal-control \-s project terminal-control-mcp
+   # Alternative: Project scope (shared via .mcp.json in version control)  
+   claude mcp add terminal-control -s project terminal-control-mcp
    ```
 
 5. **Verify the server was added**:  
