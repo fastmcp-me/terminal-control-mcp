@@ -143,6 +143,7 @@ ignore = [
 # Set the maximum allowed complexity. Functions exceeding this will be flagged.
 max-complexity = 10
 
+
 [tool.ruff.lint.pylint]
 # Set maximum number of statements in a function
 max-statements = 20
