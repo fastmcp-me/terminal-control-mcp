@@ -39,21 +39,13 @@ from .models import (
 )
 from .security import SecurityManager
 from .session_manager import SessionManager
+from .web_server import WebServer
 
 # Load configuration from TOML file and environment variables
 config = ServerConfig.from_config_and_environment()
-try:
-    if config.web_enabled:
-        from .web_server import WebServer
 
-        WEB_INTERFACE_AVAILABLE = True
-    else:
-        WebServer = None  # type: ignore
-        WEB_INTERFACE_AVAILABLE = False
-except ImportError:
-    # Fallback for environments without web dependencies
-    WebServer = None  # type: ignore
-    WEB_INTERFACE_AVAILABLE = False
+# Always import WebServer for type annotations, handle runtime availability separately
+WEB_INTERFACE_AVAILABLE = True
 
 
 # Configure logging
@@ -132,9 +124,7 @@ async def _cleanup_web_server(web_task: asyncio.Task[None] | None) -> None:
 
 async def _cleanup_sessions(session_manager: SessionManager) -> None:
     """Clean up all active sessions"""
-    sessions = await session_manager.list_sessions()
-    for session_metadata in sessions:
-        await session_manager.destroy_session(session_metadata.session_id)
+    await session_manager.shutdown()
 
 
 @asynccontextmanager
@@ -313,20 +303,10 @@ async def get_screen_content(
         )
 
     try:
-        # Use xterm.js buffer as source of truth if web server is available and using default mode
-        if (
-            app_ctx.web_server
-            and app_ctx.web_server.is_xterm_active(request.session_id)
-            and request.content_mode == "screen"
-        ):
-            screen_content = await app_ctx.web_server.mcp_get_screen_content(
-                request.session_id
-            )
-        else:
-            # Use session's content retrieval methods based on mode
-            screen_content = await session.get_content_by_mode(
-                request.content_mode, request.line_count
-            )
+        # Always use tmux/libtmux as the source of truth for MCP tools
+        screen_content = await session.get_content_by_mode(
+            request.content_mode, request.line_count
+        )
         process_running = session.is_process_alive()
         timestamp = datetime.now().isoformat()
 
@@ -396,18 +376,8 @@ async def send_input(request: SendInputRequest, ctx: Context) -> SendInputRespon
         )
 
     try:
-        # Use xterm.js input queue if web server is available
-        if app_ctx.web_server and app_ctx.web_server.is_xterm_active(
-            request.session_id
-        ):
-            queue_success = await app_ctx.web_server.mcp_send_input(
-                request.session_id, request.input_text
-            )
-            if not queue_success:
-                # Fallback to direct session input if xterm queue fails
-                await session.send_input(request.input_text)
-        else:
-            await session.send_input(request.input_text)
+        # Always send input directly to tmux session
+        await session.send_input(request.input_text)
 
         # Give a moment for the command to process and update the terminal
         await asyncio.sleep(0.1)
@@ -464,6 +434,127 @@ async def _get_session_web_url(session_id: str) -> str | None:
     return web_url
 
 
+def _detect_terminal_emulator() -> str | None:
+    """Detect available terminal emulator"""
+    terminal_emulators = [
+        # GNOME/GTK
+        ("gnome-terminal", ["gnome-terminal", "--"]),
+        # KDE
+        ("konsole", ["konsole", "-e"]),
+        # XFCE
+        ("xfce4-terminal", ["xfce4-terminal", "-e"]),
+        # Elementary OS
+        ("io.elementary.terminal", ["io.elementary.terminal", "-e"]),
+        # Generic
+        ("x-terminal-emulator", ["x-terminal-emulator", "-e"]),
+        ("xterm", ["xterm", "-e"]),
+        # macOS
+        ("Terminal", ["open", "-a", "Terminal"]),
+        # Fallback
+        ("alacritty", ["alacritty", "-e"]),
+        ("kitty", ["kitty"]),
+        ("terminator", ["terminator", "-e"]),
+    ]
+
+    for name, cmd in terminal_emulators:
+        if shutil.which(cmd[0]):
+            logger.info(f"Detected terminal emulator: {name}")
+            return cmd[0]
+
+    return None
+
+
+async def _open_terminal_window(session_id: str) -> bool:
+    """Open a terminal window that attaches to the tmux session"""
+    terminal_cmd = _detect_terminal_emulator()
+    if not terminal_cmd:
+        logger.warning("No terminal emulator found - user will need to manually attach with: tmux attach -t " + session_id)
+        return False
+
+    try:
+        # Build the tmux session name (sessions are prefixed with 'mcp_')
+        tmux_session_name = f"mcp_{session_id}"
+        
+        # Build command to attach to tmux session
+        if terminal_cmd == "open":  # macOS
+            cmd = ["open", "-a", "Terminal", "--args", "tmux", "attach-session", "-t", tmux_session_name]
+        elif terminal_cmd in ["gnome-terminal"]:
+            cmd = ["gnome-terminal", "--", "tmux", "attach-session", "-t", tmux_session_name]
+        elif terminal_cmd in ["konsole", "xfce4-terminal", "io.elementary.terminal", "x-terminal-emulator", "xterm", "alacritty", "terminator"]:
+            cmd = [terminal_cmd, "-e", "tmux", "attach-session", "-t", tmux_session_name]
+        elif terminal_cmd == "kitty":
+            cmd = ["kitty", "tmux", "attach-session", "-t", tmux_session_name]
+        else:
+            # Generic fallback
+            cmd = [terminal_cmd, "-e", "tmux", "attach-session", "-t", tmux_session_name]
+
+        # Spawn terminal window in background with proper environment
+        import os
+        env = os.environ.copy()
+        env['DISPLAY'] = env.get('DISPLAY', ':0')
+        
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
+            env=env
+        )
+        
+        # Wait a moment to check if it started successfully
+        try:
+            await asyncio.wait_for(process.wait(), timeout=1.0)
+            if process.returncode == 0:
+                logger.info(f"Terminal window opened successfully for session {session_id}")
+                return True
+            else:
+                stderr = await process.stderr.read()
+                logger.warning(f"Terminal window failed with return code {process.returncode}: {stderr.decode()}")
+                return False
+        except asyncio.TimeoutError:
+            # Process is still running, which is good - terminal is open
+            logger.info(f"Terminal window opened for session {session_id}: {' '.join(cmd)}")
+            return True
+
+    except Exception as e:
+        logger.warning(f"Failed to open terminal window for session {session_id}: {e}")
+        logger.info(f"User can manually attach with: tmux attach-session -t mcp_{session_id}")
+        return False
+
+
+async def _close_terminal_window(session_id: str) -> bool:
+    """Close terminal windows that are attached to the tmux session"""
+    try:
+        # Build the tmux session name (sessions are prefixed with 'mcp_')
+        tmux_session_name = f"mcp_{session_id}"
+        
+        # Use tmux to kill the session, which will close attached terminals  
+        cmd = ["tmux", "kill-session", "-t", tmux_session_name]
+        
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE
+        )
+        
+        # Wait for the command to complete
+        await asyncio.wait_for(process.wait(), timeout=5.0)
+        
+        if process.returncode == 0:
+            logger.info(f"Terminal window closed successfully for session {session_id}")
+            return True
+        else:
+            stderr = await process.stderr.read()
+            logger.warning(f"Failed to close terminal window for session {session_id}: {stderr.decode()}")
+            return False
+            
+    except asyncio.TimeoutError:
+        logger.warning(f"Timeout closing terminal window for session {session_id}")
+        return False
+    except Exception as e:
+        logger.error(f"Error closing terminal window for session {session_id}: {e}")
+        return False
+
+
 async def _get_initial_screen_content(app_ctx: AppContext, session_id: str) -> str | None:
     """Get initial screen content from a session"""
     session = await app_ctx.session_manager.get_session(session_id)
@@ -512,6 +603,14 @@ async def open_terminal(
         session_id = await _create_terminal_session(app_ctx, request)
         web_url = await _get_session_web_url(session_id)
         screen_content = await _get_initial_screen_content(app_ctx, session_id)
+
+        # If web interface is disabled, automatically open a terminal window
+        if not config.web_enabled:
+            terminal_opened = await _open_terminal_window(session_id)
+            if terminal_opened:
+                logger.info(f"Terminal window opened for session {session_id}")
+            else:
+                logger.info(f"Manual attachment required: tmux attach -t {session_id}")
 
         return OpenTerminalResponse(
             success=True,
