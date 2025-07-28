@@ -4,15 +4,16 @@ Terminal Control MCP Server - FastMCP Implementation
 Provides interactive terminal session management for LLM agents
 
 Core tools:
-- open_terminal: Open new terminal sessions with specified shell
-- get_screen_content: Get current terminal output from sessions
-- send_input: Send input to interactive sessions
-- list_terminal_sessions: Show active sessions
-- exit_terminal: Clean up sessions
+- `open_terminal`: Open new terminal sessions with specified shell
+- `get_screen_content`: Get current terminal output from sessions
+- `send_input`: Send input to interactive sessions (supports key combinations)
+- `list_terminal_sessions`: Show active sessions
+- `exit_terminal`: Clean up sessions
 """
 
 import asyncio
 import logging
+import os
 import shutil
 import sys
 from collections.abc import AsyncIterator
@@ -23,6 +24,7 @@ from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
 
+from .config import ServerConfig
 from .models import (
     DestroySessionRequest,
     DestroySessionResponse,
@@ -38,29 +40,25 @@ from .models import (
 from .security import SecurityManager
 from .session_manager import SessionManager
 
-# Import web server components optionally to support testing without web dependencies
+# Load configuration from TOML file and environment variables
+config = ServerConfig.from_config_and_environment()
 try:
-    from .web_server import WebServer, get_external_web_host, get_web_host, get_web_port
+    if config.web_enabled:
+        from .web_server import WebServer
 
-    WEB_INTERFACE_AVAILABLE = True
+        WEB_INTERFACE_AVAILABLE = True
+    else:
+        WebServer = None  # type: ignore
+        WEB_INTERFACE_AVAILABLE = False
 except ImportError:
-    # Fallback for testing environments without web dependencies
+    # Fallback for environments without web dependencies
     WebServer = None  # type: ignore
     WEB_INTERFACE_AVAILABLE = False
-
-    def get_web_host() -> str:
-        return "127.0.0.1"
-
-    def get_web_port() -> int:
-        return 8080
-
-    def get_external_web_host() -> Any:  # type: ignore
-        return None
 
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, config.log_level.upper(), logging.INFO),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler(sys.stderr)],
 )
@@ -91,20 +89,34 @@ class AppContext:
     session_manager: SessionManager
     security_manager: SecurityManager
     web_server: WebServer | None = None
+    config: Any = None  # ServerConfig
 
 
 async def _initialize_web_server(
     session_manager: SessionManager,
 ) -> tuple[WebServer | None, asyncio.Task[None] | None]:
-    """Initialize web server if available"""
-    if not WEB_INTERFACE_AVAILABLE or WebServer is None:
-        logger.info("Web interface not available (missing dependencies or disabled)")
+    """Initialize web server if enabled and available"""
+    if not config.web_enabled:
+        logger.info("Web interface disabled by configuration")
         return None, None
 
-    web_port = get_web_port()
-    web_server = WebServer(session_manager, port=web_port)
+    if not WEB_INTERFACE_AVAILABLE or WebServer is None:
+        logger.info("Web interface not available (missing dependencies)")
+        return None, None
+
+    # Handle port conflicts for multi-agent usage
+    web_port = config.web_port
+    agent_name = os.environ.get("TERMINAL_CONTROL_AGENT_NAME")
+    if agent_name:
+        # Add agent name hash to port to avoid conflicts
+        import hashlib
+        agent_hash = int(hashlib.md5(agent_name.encode()).hexdigest()[:4], 16)
+        web_port = config.web_port + (agent_hash % 1000)
+        logger.info(f"Using port {web_port} for agent '{agent_name}'")
+
+    web_server = WebServer(session_manager, port=web_port, agent_name=agent_name)
     web_task = asyncio.create_task(web_server.start())
-    logger.info(f"Web interface available at http://{get_web_host()}:{web_port}")
+    logger.info(f"Web interface available at http://{config.web_host}:{web_port}")
     return web_server, web_task
 
 
@@ -134,8 +146,11 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
     check_tmux_available()
 
     # Initialize components
-    session_manager = SessionManager()
-    security_manager = SecurityManager()
+    session_manager = SessionManager(max_sessions=config.max_sessions)
+    security_manager = SecurityManager(
+        security_level=config.security_level,
+        max_calls_per_minute=config.max_calls_per_minute,
+    )
     web_server, web_task = await _initialize_web_server(session_manager)
 
     try:
@@ -143,6 +158,7 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
             session_manager=session_manager,
             security_manager=security_manager,
             web_server=web_server,
+            config=config,
         )
     finally:
         logger.info("Shutting down Terminal Control MCP Server...")
@@ -152,8 +168,8 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
 
 def _get_display_web_host() -> str:
     """Get the web host for display in URLs (handles 0.0.0.0 binding)"""
-    external_host = get_external_web_host()
-    web_host = external_host or get_web_host()
+    external_host = config.external_web_host
+    web_host = external_host or config.web_host
 
     # If binding to 0.0.0.0, provide a more user-friendly URL
     if web_host == "0.0.0.0":
@@ -167,6 +183,16 @@ def _get_display_web_host() -> str:
             web_host = "localhost"
 
     return web_host
+
+
+def _get_web_port_for_agent() -> int:
+    """Get the web port, adjusted for agent if needed"""
+    agent_name = os.environ.get("TERMINAL_CONTROL_AGENT_NAME")
+    if agent_name:
+        import hashlib
+        agent_hash = int(hashlib.md5(agent_name.encode()).hexdigest()[:4], 16)
+        return config.web_port + (agent_hash % 1000)
+    return config.web_port
 
 
 # Create FastMCP server with lifespan management
@@ -185,7 +211,7 @@ async def list_terminal_sessions(ctx: Context) -> ListSessionsResponse:
     - sessions: List[SessionInfo] - List of active sessions with session_id, command, state, timestamps
     - total_sessions: int - Total number of active sessions (max 50)
 
-    Use with: get_screen_content, send_input, exit_terminal
+    Use with: `get_screen_content`, `send_input`, `exit_terminal`
     """
     app_ctx = ctx.request_context.lifespan_context
 
@@ -208,9 +234,9 @@ async def list_terminal_sessions(ctx: Context) -> ListSessionsResponse:
     )
 
     # Add web URLs for user access (agent can share these with users)
-    if session_list and WEB_INTERFACE_AVAILABLE:
+    if session_list and WEB_INTERFACE_AVAILABLE and config.web_enabled:
         web_host = _get_display_web_host()
-        web_port = get_web_port()
+        web_port = _get_web_port_for_agent()
 
         logger.info(
             f"Sessions available via web interface at http://{web_host}:{web_port}/"
@@ -236,7 +262,7 @@ async def exit_terminal(
     - session_id: str - Echo of the requested session ID
     - message: str - "Session destroyed" or "Session not found"
 
-    Use with: open_terminal, get_screen_content, send_input, list_terminal_sessions
+    Use with: `open_terminal`, `get_screen_content`, `send_input`, `list_terminal_sessions`
     """
     app_ctx = ctx.request_context.lifespan_context
 
@@ -256,7 +282,7 @@ async def get_screen_content(
     """Get terminal content from a session with precise control over what content is returned
 
     Parameters (GetScreenContentRequest):
-    - session_id: str - Session ID (from open_terminal or list_terminal_sessions)
+    - session_id: str - Session ID (from `open_terminal` or `list_terminal_sessions`)
     - content_mode: "screen" | "since_input" | "history" | "tail" - Content retrieval mode (default: "screen")
       * "screen": Current visible screen only (default)
       * "since_input": Output since last input command
@@ -272,7 +298,7 @@ async def get_screen_content(
     - timestamp: str - ISO timestamp when content was captured
     - error: str | None - Error message if operation failed
 
-    Use with: open_terminal, send_input, list_terminal_sessions, exit_terminal
+    Use with: `open_terminal`, `send_input`, `list_terminal_sessions`, `exit_terminal`
     """
     app_ctx = ctx.request_context.lifespan_context
 
@@ -288,8 +314,11 @@ async def get_screen_content(
 
     try:
         # Use xterm.js buffer as source of truth if web server is available and using default mode
-        if (app_ctx.web_server and app_ctx.web_server.is_xterm_active(request.session_id)
-            and request.content_mode == "screen"):
+        if (
+            app_ctx.web_server
+            and app_ctx.web_server.is_xterm_active(request.session_id)
+            and request.content_mode == "screen"
+        ):
             screen_content = await app_ctx.web_server.mcp_get_screen_content(
                 request.session_id
             )
@@ -302,9 +331,9 @@ async def get_screen_content(
         timestamp = datetime.now().isoformat()
 
         # Log web interface URL for user access if available
-        if WEB_INTERFACE_AVAILABLE:
+        if config.web_enabled and WEB_INTERFACE_AVAILABLE:
             web_host = _get_display_web_host()
-            web_port = get_web_port()
+            web_port = _get_web_port_for_agent()
             session_url = f"http://{web_host}:{web_port}/session/{request.session_id}"
             logger.info(f"Session {request.session_id} web interface: {session_url}")
 
@@ -334,7 +363,7 @@ async def send_input(request: SendInputRequest, ctx: Context) -> SendInputRespon
 
     Parameters (SendInputRequest):
     - session_id: str - Session ID to send input to
-    - input_text: str - Text to send (supports escape sequences: \\x03=Ctrl+C, \\x0a=Enter, \\x1b[A=Up arrow, etc.)
+    - input_text: str - Text to send (supports escape sequences: \\x03=Ctrl+C, \\x0a=Enter, \\x1b[A=Up arrow, \\x1b[B=Down arrow, \\x1b[C=Right arrow, \\x1b[D=Left arrow, \\x1b[H=Home, \\x1b[F=End, etc.)
 
     Returns SendInputResponse with:
     - success: bool - True if input was sent successfully
@@ -345,7 +374,7 @@ async def send_input(request: SendInputRequest, ctx: Context) -> SendInputRespon
     - process_running: bool | None - Whether process is still active
     - error: str | None - Error message if operation failed
 
-    Use with: open_terminal, get_screen_content, list_terminal_sessions, exit_terminal
+    Use with: `open_terminal`, `get_screen_content`, `list_terminal_sessions`, `exit_terminal`
     """
     app_ctx = ctx.request_context.lifespan_context
 
@@ -353,7 +382,7 @@ async def send_input(request: SendInputRequest, ctx: Context) -> SendInputRespon
     if not app_ctx.security_manager.validate_tool_call(
         "send_input", request.model_dump()
     ):
-        raise ValueError("Security violation: Tool call rejected")
+        raise ValueError("Security violation: Tool call rejected. If this command is safe, please enter it manually in the terminal.")
 
     session = await app_ctx.session_manager.get_session(request.session_id)
     if not session:
@@ -383,8 +412,8 @@ async def send_input(request: SendInputRequest, ctx: Context) -> SendInputRespon
         # Give a moment for the command to process and update the terminal
         await asyncio.sleep(0.1)
 
-        # Capture current screen content after input
-        screen_content = await session.get_raw_output()
+        # Capture current screen content after input (use screen mode)
+        screen_content = await session.get_current_screen_content()
         timestamp = datetime.now().isoformat()
         process_running = session.is_process_alive()
 
@@ -409,6 +438,45 @@ async def send_input(request: SendInputRequest, ctx: Context) -> SendInputRespon
         )
 
 
+async def _create_terminal_session(
+    app_ctx: AppContext, request: OpenTerminalRequest
+) -> str:
+    """Create a new terminal session and return session ID"""
+    logger.info(f"Creating terminal session with shell: {request.shell}")
+    return await app_ctx.session_manager.create_session(
+        command=request.shell,
+        timeout=config.session_timeout,
+        environment=request.environment,
+        working_directory=request.working_directory,
+    )
+
+
+async def _get_session_web_url(session_id: str) -> str | None:
+    """Get web interface URL for a session if web is enabled"""
+    if not (config.web_enabled and WEB_INTERFACE_AVAILABLE):
+        logger.info(f"Terminal session {session_id} created (web interface disabled)")
+        return None
+
+    web_host = _get_display_web_host()
+    web_port = _get_web_port_for_agent()
+    web_url = f"http://{web_host}:{web_port}/session/{session_id}"
+    logger.info(f"Terminal session {session_id} created. Web interface: {web_url}")
+    return web_url
+
+
+async def _get_initial_screen_content(app_ctx: AppContext, session_id: str) -> str | None:
+    """Get initial screen content from a session"""
+    session = await app_ctx.session_manager.get_session(session_id)
+    if not session:
+        return None
+
+    try:
+        return await session.get_current_screen_content()
+    except Exception as e:
+        logger.warning(f"Failed to get initial screen content: {e}")
+        return None
+
+
 # Terminal Opening Tool
 @mcp.tool()
 async def open_terminal(
@@ -430,7 +498,7 @@ async def open_terminal(
     - timestamp: str | None - ISO timestamp when content was captured
     - error: str | None - Error message if operation failed
 
-    Use with: send_input, get_screen_content, list_terminal_sessions, exit_terminal
+    Use with: `send_input`, `get_screen_content`, `list_terminal_sessions`, `exit_terminal`
     """
     app_ctx = ctx.request_context.lifespan_context
 
@@ -438,32 +506,12 @@ async def open_terminal(
     if not app_ctx.security_manager.validate_tool_call(
         "open_terminal", request.model_dump()
     ):
-        raise ValueError("Security violation: Tool call rejected")
+        raise ValueError("Security violation: Tool call rejected. If this configuration is safe, please create the terminal manually.")
 
     try:
-        # Create session with the specified shell
-        logger.info(f"Creating terminal session with shell: {request.shell}")
-        session_id = await app_ctx.session_manager.create_session(
-            command=request.shell,
-            timeout=30,  # Fixed timeout for shell startup
-            environment=request.environment,
-            working_directory=request.working_directory,
-        )
-
-        # Get web interface URL for this session
-        web_host = _get_display_web_host()
-        web_port = get_web_port()
-        web_url = f"http://{web_host}:{web_port}/session/{session_id}"
-        logger.info(f"Terminal session {session_id} created. Web interface: {web_url}")
-
-        # Get initial screen content
-        session = await app_ctx.session_manager.get_session(session_id)
-        screen_content = None
-        if session:
-            try:
-                screen_content = await session.get_output()
-            except Exception as e:
-                logger.warning(f"Failed to get initial screen content: {e}")
+        session_id = await _create_terminal_session(app_ctx, request)
+        web_url = await _get_session_web_url(session_id)
+        screen_content = await _get_initial_screen_content(app_ctx, session_id)
 
         return OpenTerminalResponse(
             success=True,

@@ -6,6 +6,10 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .config import SecurityLevel
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +28,7 @@ MAX_LOG_VALUE_LENGTH = 200
 DEFAULT_MAX_CALLS_PER_MINUTE = 60
 DEFAULT_MAX_SESSIONS = 50
 EXPECTED_MIN_BASE_PATHS = 4
+MAX_INPUT_TEXT_LENGTH = 10000  # Maximum allowed input text length
 
 
 @dataclass
@@ -52,10 +57,19 @@ class RateLimitData:
 class SecurityManager:
     """Comprehensive security management for MCP server"""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        security_level: "SecurityLevel | None" = None,
+        max_calls_per_minute: int = DEFAULT_MAX_CALLS_PER_MINUTE,
+    ) -> None:
+        from .config import SecurityLevel
+
         self.rate_limits: dict[str, RateLimitData] = {}
-        self.max_calls_per_minute = DEFAULT_MAX_CALLS_PER_MINUTE
+        self.max_calls_per_minute = max_calls_per_minute
         self.max_sessions = DEFAULT_MAX_SESSIONS
+        self.security_level = (
+            security_level if security_level is not None else SecurityLevel.HIGH
+        )
 
         # Dangerous command patterns that should be blocked
         self.blocked_command_patterns = {
@@ -111,12 +125,26 @@ class SecurityManager:
         self, tool_name: str, arguments: dict, client_id: str = "default"
     ) -> bool:
         """Validate if a tool call is allowed"""
+        from .config import SecurityLevel
+
+        # Security level OFF bypasses all validation
+        if self.security_level == SecurityLevel.OFF:
+            logger.debug(f"Security disabled - allowing {tool_name}")
+            return True
+
+        # Security level LOW only does basic validation
+        if self.security_level == SecurityLevel.LOW:
+            return self._validate_basic_input_only(tool_name, arguments, client_id)
 
         # Check basic validations first
         if not self._validate_basic_requirements(tool_name, arguments, client_id):
             return False
 
-        # Validate tool-specific requirements
+        # Security level MEDIUM skips some advanced checks
+        if self.security_level == SecurityLevel.MEDIUM:
+            return self._validate_medium_security(tool_name, arguments, client_id)
+
+        # Security level HIGH (default) - full validation
         if not self._validate_tool_specific_requirements(
             tool_name, arguments, client_id
         ):
@@ -124,6 +152,51 @@ class SecurityManager:
 
         # Log successful validation
         self._log_security_event("tool_call_allowed", tool_name, arguments, client_id)
+        return True
+
+    def _validate_basic_input_only(
+        self, tool_name: str, arguments: dict, client_id: str
+    ) -> bool:
+        """Basic input validation only (for LOW security level)"""
+        # Basic string validation for input_text
+        if "input_text" in arguments:
+            input_text = arguments.get("input_text", "")
+            if (
+                not isinstance(input_text, str)
+                or len(input_text) > MAX_INPUT_TEXT_LENGTH
+            ):
+                self._log_security_event(
+                    "invalid_input_text", tool_name, arguments, client_id
+                )
+                return False
+
+        return True
+
+    def _validate_medium_security(
+        self, tool_name: str, arguments: dict, client_id: str
+    ) -> bool:
+        """Medium security validation (blocks only most dangerous commands)"""
+        # Check rate limiting
+        if not self._check_rate_limit(client_id):
+            return False
+
+        # Block only the most dangerous commands
+        if "input_text" in arguments:
+            input_text = arguments.get("input_text", "")
+            dangerous_patterns = [
+                r"\brm\s+-rf\s+/",  # rm -rf /
+                r"\bdd\s+if=/dev/zero",  # dd disk wipe
+                r"\bmkfs\.",  # filesystem formatting
+                r"\b:\(\)\{.*fork.*\}",  # fork bomb
+            ]
+
+            for pattern in dangerous_patterns:
+                if re.search(pattern, input_text, re.IGNORECASE):
+                    self._log_security_event(
+                        "blocked_dangerous_command", tool_name, arguments, client_id
+                    )
+                    return False
+
         return True
 
     def _validate_basic_requirements(

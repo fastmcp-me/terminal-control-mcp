@@ -168,26 +168,97 @@ Each terminal session is accessible through a web interface that provides:
 
 ### ⚙️ **Configuration**
 
-#### Local Development
+The MCP server supports comprehensive configuration through environment variables. All settings are centralized and documented below:
+
+#### 🌐 **Web Server Configuration**
 ```bash
-# Default configuration - web interface only accessible locally
-export TERMINAL_CONTROL_WEB_HOST=127.0.0.1   # Default: 0.0.0.0 (changed for security)
-export TERMINAL_CONTROL_WEB_PORT=8080        # Default: 8080
+# Enable/disable web interface (default: true)
+export TERMINAL_CONTROL_WEB_ENABLED=true        # true/false, 1/0, yes/no, on/off
+
+# Web server networking
+export TERMINAL_CONTROL_WEB_HOST=0.0.0.0        # Default: 0.0.0.0 (all interfaces)
+export TERMINAL_CONTROL_WEB_PORT=8080           # Default: 8080
+export TERMINAL_CONTROL_EXTERNAL_HOST=server.com # External hostname for URLs (optional)
 ```
 
-#### Remote/Network Access
+#### 🛡️ **Security Configuration**
 ```bash
-# For MCP servers running on remote machines
-export TERMINAL_CONTROL_WEB_HOST=0.0.0.0            # Bind to all interfaces
-export TERMINAL_CONTROL_WEB_PORT=8080               # Choose available port
-export TERMINAL_CONTROL_EXTERNAL_HOST=your-server.com  # External hostname/IP for URLs
+# Security level (default: high)
+export TERMINAL_CONTROL_SECURITY_LEVEL=high     # off, low, medium, high
+
+# Rate limiting (default: 60)
+export TERMINAL_CONTROL_MAX_CALLS_PER_MINUTE=60
+
+# Session limits (default: 50)
+export TERMINAL_CONTROL_MAX_SESSIONS=50
 ```
 
-**Remote Access Example:**
-- MCP server runs on `server.example.com`
-- Set `TERMINAL_CONTROL_EXTERNAL_HOST=server.example.com`
-- Users access sessions at `http://server.example.com:8080/session/{session_id}`
-- Agent logs show the correct external URLs for sharing
+**Security Levels Explained:**
+- **`off`**: No security validation (allows all commands) - **USE WITH EXTREME CAUTION**
+- **`low`**: Basic input validation only (malformed input rejection)
+- **`medium`**: Standard protection (blocks most dangerous commands like `rm -rf /`, `dd`, etc.)
+- **`high`**: Full protection (current default - comprehensive validation and filtering)
+
+#### 🖥️ **Session Configuration**
+```bash
+# Default shell for new sessions (default: bash)
+export TERMINAL_CONTROL_DEFAULT_SHELL=bash       # bash, zsh, fish, sh, etc.
+
+# Session startup timeout in seconds (default: 30)
+export TERMINAL_CONTROL_SESSION_TIMEOUT=30
+```
+
+#### 🤖 **Multi-Agent Support**
+```bash
+# Agent identification for shared server usage
+export TERMINAL_CONTROL_AGENT_NAME=my-agent     # Optional agent name
+```
+
+**Multi-Agent Port Resolution:**
+When multiple agents use the same server, ports are automatically adjusted:
+- Base port: `TERMINAL_CONTROL_WEB_PORT`
+- Agent-specific port: `base_port + hash(agent_name) % 1000`
+- Example: Agent "claude" might use port 8234 instead of 8080
+
+#### 📝 **Logging Configuration**
+```bash
+# Log level (default: INFO)
+export TERMINAL_CONTROL_LOG_LEVEL=INFO          # DEBUG, INFO, WARNING, ERROR
+```
+
+#### 🌍 **Common Configuration Examples**
+
+**Local Development:**
+```bash
+# Minimal setup - web interface disabled for maximum security
+export TERMINAL_CONTROL_WEB_ENABLED=false
+export TERMINAL_CONTROL_SECURITY_LEVEL=high
+```
+
+**Remote Development Server:**
+```bash
+# External access with high security
+export TERMINAL_CONTROL_WEB_HOST=0.0.0.0
+export TERMINAL_CONTROL_WEB_PORT=8080
+export TERMINAL_CONTROL_EXTERNAL_HOST=dev-server.company.com
+export TERMINAL_CONTROL_SECURITY_LEVEL=high
+```
+
+**Multi-Agent Setup:**
+```bash
+# Agent-specific configuration
+export TERMINAL_CONTROL_AGENT_NAME=claude-dev
+export TERMINAL_CONTROL_WEB_PORT=8080  # Will auto-adjust to avoid conflicts
+export TERMINAL_CONTROL_MAX_SESSIONS=25  # Lower limit per agent
+```
+
+**Testing/Development (Lower Security):**
+```bash
+# More permissive for development - USE CAREFULLY
+export TERMINAL_CONTROL_SECURITY_LEVEL=medium
+export TERMINAL_CONTROL_MAX_CALLS_PER_MINUTE=120
+export TERMINAL_CONTROL_LOG_LEVEL=DEBUG
+```
 
 ## 🛠️ Complete Tool Set (5 Agent-Controlled Tools)
 

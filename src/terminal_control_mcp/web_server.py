@@ -7,7 +7,6 @@ Provides HTTP endpoints for viewing and interacting with terminal sessions
 import asyncio
 import json
 import logging
-import os
 from asyncio import Task
 from pathlib import Path
 from typing import Optional
@@ -23,19 +22,27 @@ from .session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
 
-# Web server configuration
-DEFAULT_WEB_PORT = 8080
-DEFAULT_WEB_HOST = "0.0.0.0"  # Bind to all interfaces by default for remote access
+# Web server configuration moved to config.py
 
 
 class WebServer:
     """FastAPI-based web server for terminal session access"""
 
-    def __init__(self, session_manager: SessionManager, port: int = DEFAULT_WEB_PORT):
+    def __init__(
+        self,
+        session_manager: SessionManager,
+        port: int = 8080,
+        agent_name: str | None = None,
+    ):
         self.session_manager = session_manager
         self.port = port
-        self.host = DEFAULT_WEB_HOST
-        self.app = FastAPI(title="Terminal Control Web Interface")
+        self.host = "0.0.0.0"
+        self.agent_name = agent_name
+
+        title = "Terminal Control Web Interface"
+        if agent_name:
+            title += f" - Agent: {agent_name}"
+        self.app = FastAPI(title=title)
         # Track active xterm.js terminals
         self.xterm_terminals: dict[str, dict] = {}  # session_id -> {websocket, session}
         # Terminal buffer tracking for MCP tool access
@@ -46,6 +53,8 @@ class WebServer:
         self.input_queues: dict[str, asyncio.Queue] = {}  # session_id -> input_queue
         # Overview WebSocket connections for auto-refresh
         self.overview_websockets: list[WebSocket] = []
+        # Templates
+        self.templates: Jinja2Templates | None = None
 
         # Setup templates and static files
         self._setup_templates_and_static()
@@ -54,65 +63,59 @@ class WebServer:
     def _setup_templates_and_static(self) -> None:
         """Setup Jinja2 templates and static file serving"""
         try:
-            # Try to use importlib.resources for installed package
-            from importlib import resources
-
-            try:
-                # Check if templates are available via package resources
-                template_path = resources.files("terminal_control_mcp") / "templates"
-                if template_path.is_dir():
-                    templates_dir = template_path
-                    logger.info(
-                        f"Using package templates directory at: {templates_dir}"
-                    )
-                    self.templates: Jinja2Templates | None = Jinja2Templates(
-                        directory=str(templates_dir)
-                    )
-                    logger.info("Package templates successfully loaded")
-                else:
-                    raise FileNotFoundError("Package templates not found")
-            except (ImportError, FileNotFoundError):
-                # Fall back to development mode (source directory)
-                current_dir = Path(__file__).parent
-                templates_dir = current_dir / "templates"
-                logger.info(
-                    f"Falling back to source templates directory at: {templates_dir}"
-                )
-
-                if templates_dir.exists():
-                    self.templates = Jinja2Templates(directory=str(templates_dir))
-                    logger.info("Source templates successfully loaded")
-                else:
-                    self.templates = None
-                    logger.error(f"Templates directory not found at {templates_dir}")
-                    raise RuntimeError(
-                        "Templates not found in package or source directory"
-                    ) from None
-
-            # Setup static files directory
-            try:
-                static_path = resources.files("terminal_control_mcp") / "static"
-                if static_path.is_dir():
-                    static_dir = static_path
-                    logger.info(f"Using package static directory at: {static_dir}")
-                    self.app.mount(
-                        "/static", StaticFiles(directory=str(static_dir)), name="static"
-                    )
-                else:
-                    raise FileNotFoundError("Package static files not found")
-            except (ImportError, FileNotFoundError):
-                # Fall back to development mode
-                current_dir = Path(__file__).parent
-                static_dir = current_dir / "static"
-                if static_dir.exists():
-                    logger.info(f"Using source static directory at: {static_dir}")
-                    self.app.mount(
-                        "/static", StaticFiles(directory=str(static_dir)), name="static"
-                    )
-
+            self._setup_templates()
+            self._setup_static_files()
         except Exception as e:
             logger.error(f"Error setting up templates and static files: {e}")
             self.templates = None
+
+    def _setup_templates(self) -> None:
+        """Setup Jinja2 templates"""
+        from importlib import resources
+
+        # Try package resources first
+        try:
+            template_path = resources.files("terminal_control_mcp") / "templates"
+            if template_path.is_dir():
+                logger.info(f"Using package templates directory at: {template_path}")
+                self.templates = Jinja2Templates(directory=str(template_path))
+                logger.info("Package templates successfully loaded")
+                return
+        except (ImportError, FileNotFoundError):
+            pass
+
+        # Fall back to source directory
+        current_dir = Path(__file__).parent
+        templates_dir = current_dir / "templates"
+        if templates_dir.exists():
+            logger.info(f"Falling back to source templates directory at: {templates_dir}")
+            self.templates = Jinja2Templates(directory=str(templates_dir))
+            logger.info("Source templates successfully loaded")
+        else:
+            self.templates = None
+            logger.error(f"Templates directory not found at {templates_dir}")
+            raise RuntimeError("Templates not found in package or source directory")
+
+    def _setup_static_files(self) -> None:
+        """Setup static file serving"""
+        from importlib import resources
+
+        # Try package resources first
+        try:
+            static_path = resources.files("terminal_control_mcp") / "static"
+            if static_path.is_dir():
+                logger.info(f"Using package static directory at: {static_path}")
+                self.app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
+                return
+        except (ImportError, FileNotFoundError):
+            pass
+
+        # Fall back to source directory
+        current_dir = Path(__file__).parent
+        static_dir = current_dir / "static"
+        if static_dir.exists():
+            logger.info(f"Using source static directory at: {static_dir}")
+            self.app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     def _setup_routes(self) -> None:
         """Setup FastAPI routes"""
@@ -154,7 +157,7 @@ class WebServer:
             raise HTTPException(status_code=404, detail="Session metadata not found")
 
         try:
-            screen_content = await session.get_output()
+            screen_content = await session.get_current_screen_content()
         except Exception as e:
             logger.warning(f"Failed to get screen content: {e}")
             screen_content = f"Error getting screen content: {e}"
@@ -222,12 +225,14 @@ class WebServer:
     ) -> dict[str, Task[None] | None]:
         """Set up background tasks for WebSocket handling"""
         # Initialize buffer for MCP tools
-        initial_content = await session.get_raw_output()
+        initial_content = await session.get_raw_terminal_output()
         self.terminal_buffers[session_id] = initial_content
 
         # No manual content restoration needed - tmux pipe-pane stream will naturally
         # provide all session history through incremental polling
-        logger.debug(f"WebSocket established for session {session_id}, starting incremental stream")
+        logger.debug(
+            f"WebSocket established for session {session_id}, starting incremental stream"
+        )
 
         # Start background tasks
         mcp_input_task = asyncio.create_task(
@@ -238,7 +243,6 @@ class WebServer:
         )
 
         return {"mcp_input_task": mcp_input_task, "output_poll_task": output_poll_task}
-
 
     async def _handle_websocket_messages(
         self, session: "InteractiveSession", websocket: WebSocket
@@ -255,7 +259,7 @@ class WebServer:
                     # Ignore resize events - tmux stays at fixed size for clean MCP output
                     pass
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # Keep connection alive
                 continue
 
@@ -285,59 +289,88 @@ class WebServer:
         self, session_id: str, session: InteractiveSession, websocket: WebSocket
     ) -> None:
         """Poll tmux session for new stream output and send incremental data to websocket"""
-        # Each WebSocket connection tracks its own stream position for proper history restoration
         websocket_stream_position = 0
 
         try:
-            # First, send all existing content to restore session history
-            if session.output_stream_file.exists():
-                try:
-                    with open(session.output_stream_file, "rb") as f:
-                        historical_data = f.read()
-                        websocket_stream_position = f.tell()
-
-                    if historical_data:
-                        historical_content = historical_data.decode("utf-8", errors="replace")
-                        await websocket.send_text(historical_content)
-                        logger.debug(f"Restored {len(historical_content)} chars of history for session {session_id}")
-                except Exception as e:
-                    logger.debug(f"Error restoring historical content: {e}")
+            # Send historical content first
+            websocket_stream_position = await self._send_historical_content(
+                session, websocket, session_id
+            )
 
             # Then poll for incremental updates
-            while True:
-                await asyncio.sleep(0.05)  # Poll every 50ms for responsiveness
-
-                try:
-                    # Get incremental stream output from this WebSocket's position
-                    if session.output_stream_file.exists():
-                        with open(session.output_stream_file, "rb") as f:
-                            f.seek(websocket_stream_position)
-                            new_data = f.read()
-                            websocket_stream_position = f.tell()
-
-                        if new_data:
-                            new_stream_data = new_data.decode("utf-8", errors="replace")
-                            # Send incremental stream data directly to xterm.js
-                            await websocket.send_text(new_stream_data)
-
-                            # Update buffer for MCP tools - get full content
-                            full_content = await session.get_raw_output()
-                            self.terminal_buffers[session_id] = full_content
-
-                            # Update for MCP tools
-                            if session_id in self.xterm_terminals:
-                                self.xterm_terminals[session_id][
-                                    "last_update"
-                                ] = asyncio.get_event_loop().time()
-
-                        # Check if session process has terminated and auto-destroy
-                        await self._check_session_termination(session_id, session)
-
-                except Exception as e:
-                    logger.debug(f"Error polling tmux stream output: {e}")
-
+            await self._poll_incremental_updates(
+                session_id, session, websocket, websocket_stream_position
+            )
         except asyncio.CancelledError:
             pass
+
+    async def _send_historical_content(
+        self, session: InteractiveSession, websocket: WebSocket, session_id: str
+    ) -> int:
+        """Send existing historical content and return stream position"""
+        websocket_stream_position = 0
+
+        if not session.output_stream_file.exists():
+            return websocket_stream_position
+
+        try:
+            with open(session.output_stream_file, "rb") as f:
+                historical_data = f.read()
+                websocket_stream_position = f.tell()
+
+            if historical_data:
+                historical_content = historical_data.decode("utf-8", errors="replace")
+                await websocket.send_text(historical_content)
+                logger.debug(
+                    f"Restored {len(historical_content)} chars of history for session {session_id}"
+                )
+        except Exception as e:
+            logger.debug(f"Error restoring historical content: {e}")
+
+        return websocket_stream_position
+
+    async def _poll_incremental_updates(
+        self, session_id: str, session: InteractiveSession, websocket: WebSocket, stream_position: int
+    ) -> None:
+        """Poll for and send incremental updates"""
+        websocket_stream_position = stream_position
+
+        while True:
+            await asyncio.sleep(0.05)  # Poll every 50ms for responsiveness
+
+            try:
+                websocket_stream_position = await self._process_stream_update(
+                    session_id, session, websocket, websocket_stream_position
+                )
+                await self._check_session_termination(session_id, session)
+            except Exception as e:
+                logger.debug(f"Error polling tmux stream output: {e}")
+
+    async def _process_stream_update(
+        self, session_id: str, session: InteractiveSession, websocket: WebSocket, stream_position: int
+    ) -> int:
+        """Process a single stream update and return new position"""
+        if not session.output_stream_file.exists():
+            return stream_position
+
+        with open(session.output_stream_file, "rb") as f:
+            f.seek(stream_position)
+            new_data = f.read()
+            new_stream_position = f.tell()
+
+        if new_data:
+            new_stream_data = new_data.decode("utf-8", errors="replace")
+            await websocket.send_text(new_stream_data)
+
+            # Update buffer for MCP tools
+            full_content = await session.get_raw_terminal_output()
+            self.terminal_buffers[session_id] = full_content
+
+            # Update timestamp for MCP tools
+            if session_id in self.xterm_terminals:
+                self.xterm_terminals[session_id]["last_update"] = asyncio.get_event_loop().time()
+
+        return new_stream_position
 
     async def _handle_mcp_input(
         self, session_id: str, session: InteractiveSession
@@ -381,7 +414,7 @@ class WebServer:
         session = await self.session_manager.get_session(session_id)
         if session:
             try:
-                return await session.get_raw_output()
+                return await session.get_raw_terminal_output()
             except Exception as e:
                 logger.warning(f"Failed to get session output: {e}")
                 return None
@@ -556,19 +589,3 @@ class WebServer:
         return f"http://{display_host}:{self.port}/session/{session_id}"
 
 
-def get_web_port() -> int:
-    """Get web server port from environment or use default"""
-    try:
-        return int(os.environ.get("TERMINAL_CONTROL_WEB_PORT", DEFAULT_WEB_PORT))
-    except ValueError:
-        return DEFAULT_WEB_PORT
-
-
-def get_web_host() -> str:
-    """Get web server host from environment or use default"""
-    return os.environ.get("TERMINAL_CONTROL_WEB_HOST", DEFAULT_WEB_HOST)
-
-
-def get_external_web_host() -> str | None:
-    """Get external web host for URLs (may be different from bind host)"""
-    return os.environ.get("TERMINAL_CONTROL_EXTERNAL_HOST")

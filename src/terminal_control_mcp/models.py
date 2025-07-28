@@ -48,11 +48,10 @@ class GetScreenContentRequest(BaseModel):
     session_id: str = Field(description="ID of the session to get content from")
     content_mode: Literal["screen", "since_input", "history", "tail"] = Field(
         "screen",
-        description="Content mode: 'screen' (current visible screen), 'since_input' (output since last input), 'history' (full terminal history), 'tail' (last N lines)"
+        description="Content mode: 'screen' (current visible screen), 'since_input' (output since last input), 'history' (full terminal history), 'tail' (last N lines)",
     )
     line_count: int | None = Field(
-        None,
-        description="Number of lines for 'tail' mode (ignored for other modes)"
+        None, description="Number of lines for 'tail' mode (ignored for other modes)"
     )
 
 
