@@ -18,3 +18,32 @@ timeout = 30
 
 [logging]
 level = "INFO"  # DEBUG, INFO, WARNING, ERROR
+
+[terminal]
+width = 120
+height = 30
+close_timeout = 5.0
+process_check_timeout = 1.0
+polling_interval = 0.05
+send_input_delay = 0.1
+
+# Terminal emulator configuration (ordered by preference)
+emulators = [
+    # GNOME/GTK
+    { name = "gnome-terminal", command = ["gnome-terminal", "--"] },
+    # KDE  
+    { name = "konsole", command = ["konsole", "-e"] },
+    # XFCE
+    { name = "xfce4-terminal", command = ["xfce4-terminal", "-e"] },
+    # Elementary OS
+    { name = "io.elementary.terminal", command = ["io.elementary.terminal", "-e"] },
+    # Generic
+    { name = "x-terminal-emulator", command = ["x-terminal-emulator", "-e"] },
+    { name = "xterm", command = ["xterm", "-e"] },
+    # macOS
+    { name = "Terminal", command = ["open", "-a", "Terminal"] },
+    # Fallback
+    { name = "alacritty", command = ["alacritty", "-e"] },
+    { name = "kitty", command = ["kitty"] },
+    { name = "terminator", command = ["terminator", "-e"] },
+]

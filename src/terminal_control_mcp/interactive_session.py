@@ -8,6 +8,7 @@ from pathlib import Path
 
 import libtmux
 
+from .config import config
 from .interaction_logger import InteractionLogger
 
 logger = logging.getLogger(__name__)
@@ -106,8 +107,8 @@ class InteractiveSession:
             lambda: tmux_server.new_session(
                 session_name=self.tmux_session_name,
                 start_directory=self.working_directory,
-                width=120,
-                height=30,
+                width=config.terminal_width,
+                height=config.terminal_height,
                 detach=True,
             ),
         )
@@ -129,7 +130,7 @@ class InteractiveSession:
         tmux_session = self.tmux_session
         await loop.run_in_executor(
             None,
-            lambda: tmux_session.cmd("resize-window", "-x", "120", "-y", "30"),
+            lambda: tmux_session.cmd("resize-window", "-x", str(config.terminal_width), "-y", str(config.terminal_height)),
         )
 
     async def _setup_terminal_output_capture(self) -> None:

@@ -198,6 +198,54 @@ export TERMINAL_CONTROL_WEB_PORT=8080           # Default: 8080
 export TERMINAL_CONTROL_EXTERNAL_HOST=server.com # External hostname for URLs (optional)
 ```
 
+#### 🖥️ **Terminal Configuration**
+```bash
+# Terminal window dimensions (default: 120x30)
+export TERMINAL_CONTROL_TERMINAL_WIDTH=120      # Terminal width in columns
+export TERMINAL_CONTROL_TERMINAL_HEIGHT=30      # Terminal height in rows
+
+# Terminal process timeouts (in seconds)
+export TERMINAL_CONTROL_TERMINAL_CLOSE_TIMEOUT=5.0         # Timeout for closing terminal windows
+export TERMINAL_CONTROL_TERMINAL_PROCESS_CHECK_TIMEOUT=1.0 # Timeout for checking process status
+
+# Terminal responsiveness settings
+export TERMINAL_CONTROL_TERMINAL_POLLING_INTERVAL=0.05     # Web interface polling interval (seconds)
+export TERMINAL_CONTROL_TERMINAL_SEND_INPUT_DELAY=0.1      # Delay after sending input (seconds)
+```
+
+**Terminal Emulator Support:**
+The system automatically detects and uses available terminal emulators in order of preference:
+- **GNOME/GTK**: gnome-terminal
+- **KDE**: konsole  
+- **XFCE**: xfce4-terminal
+- **Elementary OS**: io.elementary.terminal
+- **Generic**: x-terminal-emulator, xterm
+- **macOS**: Terminal (via `open -a Terminal`)
+- **Modern terminals**: alacritty, kitty, terminator
+
+**Custom Terminal Emulator Configuration:**
+You can customize terminal emulator preferences and commands through the `[terminal]` section in `terminal-control.toml`:
+
+```toml
+[terminal]
+# Terminal dimensions
+width = 120
+height = 30
+
+# Timeouts and delays  
+close_timeout = 5.0
+process_check_timeout = 1.0
+polling_interval = 0.05
+send_input_delay = 0.1
+
+# Custom terminal emulator configuration (ordered by preference)
+emulators = [
+    { name = "my-terminal", command = ["my-terminal", "--exec"] },
+    { name = "gnome-terminal", command = ["gnome-terminal", "--"] },
+    # ... other terminals
+]
+```
+
 #### 🛡️ **Security Configuration**
 ```bash
 # Security level (default: high)
@@ -245,7 +293,44 @@ export TERMINAL_CONTROL_LOG_LEVEL=INFO          # DEBUG, INFO, WARNING, ERROR
 
 #### 🌍 **Common Configuration Examples**
 
-**Local Development:**
+**TOML Configuration File (Recommended):**
+Create or edit `terminal-control.toml` in your project root:
+
+```toml
+[web]
+enabled = false  # Disable web interface, use terminal windows
+host = "0.0.0.0"
+port = 8080
+
+[security]
+level = "high"
+max_calls_per_minute = 60
+max_sessions = 50
+
+[session]
+default_shell = "bash"
+timeout = 30
+
+[terminal]
+width = 120
+height = 30
+close_timeout = 5.0
+process_check_timeout = 1.0
+polling_interval = 0.05
+send_input_delay = 0.1
+
+# Custom terminal emulator configuration (optional)
+emulators = [
+    { name = "gnome-terminal", command = ["gnome-terminal", "--"] },
+    { name = "konsole", command = ["konsole", "-e"] },
+    # Add your preferred terminals here
+]
+
+[logging]
+level = "INFO"
+```
+
+**Local Development (Environment Variables):**
 ```bash
 # Minimal setup - web interface disabled for maximum security
 export TERMINAL_CONTROL_WEB_ENABLED=false
@@ -676,6 +761,7 @@ terminal-control-mcp/
 │   └── interactions/          # Detailed session logs (JSON & text)
 ├── CLAUDE.md                  # Development guidance for AI assistants
 ├── README.md                  # This file
+├── terminal-control.toml     # TOML configuration file (all server settings)
 ├── pyproject.toml            # Python packaging and tool configuration
 └── pytest.ini               # Pytest configuration
 ```

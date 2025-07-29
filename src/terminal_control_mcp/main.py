@@ -389,7 +389,7 @@ async def send_input(request: SendInputRequest, ctx: Context) -> SendInputRespon
         await session.send_input(request.input_text)
 
         # Give a moment for the command to process and update the terminal
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(config.terminal_send_input_delay)
 
         # Capture current screen content after input (use screen mode)
         screen_content = await session.get_current_screen_content()
@@ -536,5 +536,4 @@ def main_sync() -> None:
 
 
 if __name__ == "__main__":
-    # it feels like the emulators in `detect_terminal_emulator` in terminal_utils.py should not be hard-coded but part of the configuration file. anything else like this?
     main_sync()

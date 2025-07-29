@@ -6,10 +6,10 @@ All configuration options and environment variable handling
 
 import os
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 
 class SecurityLevel(Enum):
@@ -19,6 +19,12 @@ class SecurityLevel(Enum):
     LOW = "low"  # Basic input validation only
     MEDIUM = "medium"  # Standard protection (blocks common dangerous commands)
     HIGH = "high"  # Full protection (current default behavior)
+
+
+class TerminalEmulator(TypedDict):
+    """Terminal emulator configuration"""
+    name: str
+    command: list[str]
 
 
 @dataclass
@@ -42,6 +48,15 @@ class ServerConfig:
 
     # Logging configuration
     log_level: str = "INFO"
+
+    # Terminal configuration
+    terminal_width: int = 120
+    terminal_height: int = 30
+    terminal_close_timeout: float = 5.0
+    terminal_process_check_timeout: float = 1.0
+    terminal_polling_interval: float = 0.05
+    terminal_send_input_delay: float = 0.1
+    terminal_emulators: list[TerminalEmulator] = field(default_factory=lambda: [])
 
     # Note: agent_name is handled dynamically per connection, not in static config
 
@@ -108,6 +123,34 @@ class ServerConfig:
                 config_data.get("logging", {}).get("level", "INFO"),
             )
             or "INFO",
+            # Terminal
+            terminal_width=cls._get_int_value(
+                "TERMINAL_CONTROL_TERMINAL_WIDTH",
+                config_data.get("terminal", {}).get("width", 120),
+            ),
+            terminal_height=cls._get_int_value(
+                "TERMINAL_CONTROL_TERMINAL_HEIGHT",
+                config_data.get("terminal", {}).get("height", 30),
+            ),
+            terminal_close_timeout=cls._get_float_value(
+                "TERMINAL_CONTROL_TERMINAL_CLOSE_TIMEOUT",
+                config_data.get("terminal", {}).get("close_timeout", 5.0),
+            ),
+            terminal_process_check_timeout=cls._get_float_value(
+                "TERMINAL_CONTROL_TERMINAL_PROCESS_CHECK_TIMEOUT",
+                config_data.get("terminal", {}).get("process_check_timeout", 1.0),
+            ),
+            terminal_polling_interval=cls._get_float_value(
+                "TERMINAL_CONTROL_TERMINAL_POLLING_INTERVAL",
+                config_data.get("terminal", {}).get("polling_interval", 0.05),
+            ),
+            terminal_send_input_delay=cls._get_float_value(
+                "TERMINAL_CONTROL_TERMINAL_SEND_INPUT_DELAY",
+                config_data.get("terminal", {}).get("send_input_delay", 0.1),
+            ),
+            terminal_emulators=cls._get_terminal_emulators(
+                config_data.get("terminal", {}).get("emulators", [])
+            ),
         )
 
     @classmethod
@@ -176,6 +219,17 @@ class ServerConfig:
         return default
 
     @staticmethod
+    def _get_float_value(env_var: str, default: float) -> float:
+        """Get float value from environment, falling back to default"""
+        env_value = os.environ.get(env_var)
+        if env_value is not None:
+            try:
+                return float(env_value)
+            except ValueError:
+                pass
+        return default
+
+    @staticmethod
     def _get_security_level(env_var: str, default: str) -> SecurityLevel:
         """Get security level from environment, falling back to default"""
         env_value = os.environ.get(env_var)
@@ -184,6 +238,35 @@ class ServerConfig:
             return SecurityLevel(level_str.lower())
         except ValueError:
             return SecurityLevel.HIGH
+
+    @staticmethod
+    def _get_terminal_emulators(emulator_configs: list[dict[str, Any]]) -> list[TerminalEmulator]:
+        """Parse terminal emulator configurations from TOML"""
+        if not emulator_configs:
+            # Default terminal emulators if none configured
+            return [
+                {"name": "gnome-terminal", "command": ["gnome-terminal", "--"]},
+                {"name": "konsole", "command": ["konsole", "-e"]},
+                {"name": "xfce4-terminal", "command": ["xfce4-terminal", "-e"]},
+                {"name": "io.elementary.terminal", "command": ["io.elementary.terminal", "-e"]},
+                {"name": "x-terminal-emulator", "command": ["x-terminal-emulator", "-e"]},
+                {"name": "xterm", "command": ["xterm", "-e"]},
+                {"name": "Terminal", "command": ["open", "-a", "Terminal"]},
+                {"name": "alacritty", "command": ["alacritty", "-e"]},
+                {"name": "kitty", "command": ["kitty"]},
+                {"name": "terminator", "command": ["terminator", "-e"]},
+            ]
+
+        emulators: list[TerminalEmulator] = []
+        for config in emulator_configs:
+            if isinstance(config, dict) and "name" in config and "command" in config:
+                emulator: TerminalEmulator = {
+                    "name": config["name"],
+                    "command": config["command"]
+                }
+                emulators.append(emulator)
+
+        return emulators
 
 
 # Global configuration instance (backwards compatibility)

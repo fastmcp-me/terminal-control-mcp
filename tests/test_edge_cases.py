@@ -396,7 +396,7 @@ class TestAsyncEdgeCases:
             from src.terminal_control_mcp.models import SendInputRequest
 
             input_request = SendInputRequest(
-                session_id=result.session_id, input_text="sleep 10\\n"
+                session_id=result.session_id, input_text="sleep 10\n"
             )
             await send_input(input_request, mock_context)
 
@@ -424,7 +424,7 @@ class TestAsyncEdgeCases:
 
             input_request = SendInputRequest(
                 session_id=session_id,
-                input_text="import time; input('wait: '); print('done')\\n",
+                input_text="import time; input('wait: '); print('done')\n",
             )
             await send_input(input_request, mock_context)
 
@@ -443,7 +443,7 @@ class TestAsyncEdgeCases:
             tasks.append(get_screen_content(screen_request, mock_context))
 
             # Send input
-            input_request = SendInputRequest(session_id=session_id, input_text="test\\n")
+            input_request = SendInputRequest(session_id=session_id, input_text="test\n")
             tasks.append(send_input(input_request, mock_context))
 
             # Execute concurrently

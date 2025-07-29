@@ -17,6 +17,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from .config import config
 from .interactive_session import InteractiveSession
 from .session_manager import SessionManager
 
@@ -346,7 +347,7 @@ class WebServer:
         websocket_stream_position = stream_position
 
         while True:
-            await asyncio.sleep(0.05)  # Poll every 50ms for responsiveness
+            await asyncio.sleep(config.terminal_polling_interval)  # Poll for responsiveness
 
             try:
                 websocket_stream_position = await self._process_stream_update(

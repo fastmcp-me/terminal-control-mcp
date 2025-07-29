@@ -8,76 +8,53 @@ import asyncio
 import logging
 import shutil
 
+from .config import config
+
 logger = logging.getLogger(__name__)
 
 
 def detect_terminal_emulator() -> str | None:
-    """Detect available terminal emulator"""
-    terminal_emulators = [
-        # GNOME/GTK
-        ("gnome-terminal", ["gnome-terminal", "--"]),
-        # KDE
-        ("konsole", ["konsole", "-e"]),
-        # XFCE
-        ("xfce4-terminal", ["xfce4-terminal", "-e"]),
-        # Elementary OS
-        ("io.elementary.terminal", ["io.elementary.terminal", "-e"]),
-        # Generic
-        ("x-terminal-emulator", ["x-terminal-emulator", "-e"]),
-        ("xterm", ["xterm", "-e"]),
-        # macOS
-        ("Terminal", ["open", "-a", "Terminal"]),
-        # Fallback
-        ("alacritty", ["alacritty", "-e"]),
-        ("kitty", ["kitty"]),
-        ("terminator", ["terminator", "-e"]),
-    ]
+    """Detect available terminal emulator using configuration"""
+    terminal_emulators = config.terminal_emulators
 
-    for name, cmd in terminal_emulators:
-        if shutil.which(cmd[0]):
+    for emulator in terminal_emulators:
+        name = emulator["name"]
+        command = emulator["command"]
+        if shutil.which(command[0]):
             logger.info(f"Detected terminal emulator: {name}")
-            return cmd[0]
+            return command[0]
 
     return None
 
 
 def _build_terminal_command(terminal_cmd: str, tmux_session_name: str) -> list[str]:
-    """Build the appropriate command for different terminal emulators"""
-    if terminal_cmd == "open":  # macOS
-        return [
-            "open",
-            "-a",
-            "Terminal",
-            "--args",
-            "tmux",
-            "attach-session",
-            "-t",
-            tmux_session_name,
-        ]
-    elif terminal_cmd in ["gnome-terminal"]:
-        return [
-            "gnome-terminal",
-            "--",
-            "tmux",
-            "attach-session",
-            "-t",
-            tmux_session_name,
-        ]
-    elif terminal_cmd in [
-        "konsole",
-        "xfce4-terminal",
-        "io.elementary.terminal",
-        "x-terminal-emulator",
-        "xterm",
-        "alacritty",
-        "terminator",
-    ]:
-        return [terminal_cmd, "-e", "tmux", "attach-session", "-t", tmux_session_name]
-    elif terminal_cmd == "kitty":
-        return ["kitty", "tmux", "attach-session", "-t", tmux_session_name]
-    else:
-        # Generic fallback
-        return [terminal_cmd, "-e", "tmux", "attach-session", "-t", tmux_session_name]
+    """Build the appropriate command for different terminal emulators using configuration"""
+    # Find the matching emulator configuration
+    for emulator in config.terminal_emulators:
+        if emulator["command"][0] == terminal_cmd:
+            # Get the base command from configuration
+            base_command = emulator["command"].copy()
+
+            # Handle special cases for different terminal types
+            if terminal_cmd == "open":  # macOS Terminal
+                return [
+                    "open",
+                    "-a",
+                    "Terminal",
+                    "--args",
+                    "tmux",
+                    "attach-session",
+                    "-t",
+                    tmux_session_name,
+                ]
+            elif terminal_cmd == "kitty":  # Kitty doesn't use -e
+                return ["kitty", "tmux", "attach-session", "-t", tmux_session_name]
+            else:
+                # Most terminals use the pattern: terminal [args] tmux attach-session -t session
+                return base_command + ["tmux", "attach-session", "-t", tmux_session_name]
+
+    # Fallback if not found in configuration
+    return [terminal_cmd, "-e", "tmux", "attach-session", "-t", tmux_session_name]
 
 
 def _prepare_environment() -> dict[str, str]:
@@ -94,7 +71,7 @@ async def _check_process_result(
 ) -> bool:
     """Check if the terminal process started successfully"""
     try:
-        await asyncio.wait_for(process.wait(), timeout=1.0)
+        await asyncio.wait_for(process.wait(), timeout=config.terminal_process_check_timeout)
         if process.returncode == 0:
             logger.info(f"Terminal window opened successfully for session {session_id}")
             return True
@@ -159,7 +136,7 @@ async def close_terminal_window(session_id: str) -> bool:
         )
 
         # Wait for the command to complete
-        await asyncio.wait_for(process.wait(), timeout=5.0)
+        await asyncio.wait_for(process.wait(), timeout=config.terminal_close_timeout)
 
         if process.returncode == 0:
             logger.info(f"Terminal window closed successfully for session {session_id}")
