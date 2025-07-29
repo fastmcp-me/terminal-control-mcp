@@ -4,3 +4,4 @@
 /src/terminal_control_mcp.egg-info/
 /.claude/
 /logs/
+/dist/
