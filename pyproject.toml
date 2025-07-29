@@ -50,7 +50,9 @@ dev = [
     "ruff>=0.1.0",
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
-    "vulture>=2.3"
+    "vulture>=2.3",
+    "twine>=6.1.0",
+    "build>=1.2.2.post1",
 ]
 
 [project.urls]
