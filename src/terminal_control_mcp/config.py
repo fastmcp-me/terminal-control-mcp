@@ -35,6 +35,7 @@ class ServerConfig:
     web_enabled: bool = False
     web_host: str = "0.0.0.0"
     web_port: int = 8080
+    web_auto_port: bool = True  # Automatically select unique port to avoid conflicts
     external_web_host: str | None = None
 
     # Security configuration
@@ -74,7 +75,7 @@ class ServerConfig:
         4. /etc/terminal-control.toml
         """
         config_data = cls._load_toml_config(config_file)
-        
+
         # Start with class defaults - single source of truth
         defaults = cls()
 
@@ -92,6 +93,10 @@ class ServerConfig:
             web_port=cls._get_int_value(
                 "TERMINAL_CONTROL_WEB_PORT",
                 config_data.get("web", {}).get("port", defaults.web_port),
+            ),
+            web_auto_port=cls._get_bool_value(
+                "TERMINAL_CONTROL_WEB_AUTO_PORT",
+                config_data.get("web", {}).get("auto_port", defaults.web_auto_port),
             ),
             external_web_host=cls._get_str_value(
                 "TERMINAL_CONTROL_EXTERNAL_HOST",

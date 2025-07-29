@@ -33,17 +33,12 @@ class WebServer:
         self,
         session_manager: SessionManager,
         port: int = 8080,
-        agent_name: str | None = None,
     ):
         self.session_manager = session_manager
         self.port = port
         self.host = "0.0.0.0"
-        self.agent_name = agent_name
 
-        title = "Terminal Control Web Interface"
-        if agent_name:
-            title += f" - Agent: {agent_name}"
-        self.app = FastAPI(title=title)
+        self.app = FastAPI(title="Terminal Control Web Interface")
         # Track active xterm.js terminals
         self.xterm_terminals: dict[str, dict] = {}  # session_id -> {websocket, session}
         # Terminal buffer tracking for MCP tool access

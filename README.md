@@ -183,8 +183,8 @@ The MCP server supports comprehensive configuration through TOML configuration f
 
 #### 🌐 **Web Server Configuration**
 ```bash
-# Enable/disable web interface (default: true)
-export TERMINAL_CONTROL_WEB_ENABLED=true        # true/false, 1/0, yes/no, on/off
+# Enable/disable web interface (default: false)
+export TERMINAL_CONTROL_WEB_ENABLED=false       # true/false, 1/0, yes/no, on/off
 
 # When web interface is DISABLED:
 # - Automatically opens terminal windows for sessions using system terminal emulator
@@ -194,7 +194,8 @@ export TERMINAL_CONTROL_WEB_ENABLED=true        # true/false, 1/0, yes/no, on/of
 
 # Web server networking
 export TERMINAL_CONTROL_WEB_HOST=0.0.0.0        # Default: 0.0.0.0 (all interfaces)
-export TERMINAL_CONTROL_WEB_PORT=8080           # Default: 8080
+export TERMINAL_CONTROL_WEB_PORT=8080           # Default: 8080 (base port)
+export TERMINAL_CONTROL_WEB_AUTO_PORT=true      # Default: true (automatic unique port selection)
 export TERMINAL_CONTROL_EXTERNAL_HOST=server.com # External hostname for URLs (optional)
 ```
 
@@ -273,17 +274,25 @@ export TERMINAL_CONTROL_DEFAULT_SHELL=bash       # bash, zsh, fish, sh, etc.
 export TERMINAL_CONTROL_SESSION_TIMEOUT=30
 ```
 
-#### 🤖 **Multi-Agent Support**
+#### 🤖 **Multi-Instance Port Conflict Resolution**
+
+**Automatic Port Selection:**
+When multiple MCP server instances run simultaneously, the web server automatically selects unique ports to avoid conflicts:
+
 ```bash
-# Agent identification for shared server usage
-export TERMINAL_CONTROL_AGENT_NAME=my-agent     # Optional agent name
+# Automatic port selection (default: enabled)
+export TERMINAL_CONTROL_WEB_AUTO_PORT=true      # Default: true
+
+# Base port (when auto_port=false) 
+export TERMINAL_CONTROL_WEB_PORT=8080           # Default: 8080
 ```
 
-**Multi-Agent Port Resolution:**
-When multiple agents use the same server, ports are automatically adjusted:
-- Base port: `TERMINAL_CONTROL_WEB_PORT`
-- Agent-specific port: `base_port + hash(agent_name) % 1000`
-- Example: Agent "claude" might use port 8234 instead of 8080
+**How It Works:**
+- **`web_auto_port=true`**: Automatically selects unique ports in range 9000-9999 based on working directory + process ID
+- **`web_auto_port=false`**: Uses fixed `web_port` (may conflict with other instances)
+- **Port determination**: `9000 + hash(working_dir:process_id) % 1000`
+- **Consistent**: Same directory/process always gets same port across restarts
+- **Safe range**: 9000-9999 avoids conflicts with common services
 
 #### 📝 **Logging Configuration**
 ```bash
@@ -298,9 +307,10 @@ Create or edit `terminal-control.toml` in your project root:
 
 ```toml
 [web]
-enabled = false  # Disable web interface, use terminal windows
+enabled = false     # Disable web interface, use terminal windows
 host = "0.0.0.0"
-port = 8080
+port = 8080         # Base port (when auto_port=false)
+auto_port = true    # Automatic unique port selection (default)
 
 [security]
 level = "high"
@@ -346,12 +356,15 @@ export TERMINAL_CONTROL_EXTERNAL_HOST=dev-server.company.com
 export TERMINAL_CONTROL_SECURITY_LEVEL=high
 ```
 
-**Multi-Agent Setup:**
+**Multi-Instance Setup:**
 ```bash
-# Agent-specific configuration
-export TERMINAL_CONTROL_AGENT_NAME=claude-dev
-export TERMINAL_CONTROL_WEB_PORT=8080  # Will auto-adjust to avoid conflicts
-export TERMINAL_CONTROL_MAX_SESSIONS=25  # Lower limit per agent
+# Multiple instances with automatic port resolution (recommended)
+export TERMINAL_CONTROL_WEB_AUTO_PORT=true    # Default: automatic port selection
+export TERMINAL_CONTROL_MAX_SESSIONS=25       # Lower limit per instance
+
+# Fixed port setup (may require manual port management)
+export TERMINAL_CONTROL_WEB_AUTO_PORT=false
+export TERMINAL_CONTROL_WEB_PORT=8081         # Manually specify different ports
 ```
 
 **Testing/Development (Lower Security):**

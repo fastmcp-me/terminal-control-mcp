@@ -97,18 +97,10 @@ async def _initialize_web_server(
         logger.info("Web interface not available (missing dependencies)")
         return None, None
 
-    # Handle port conflicts for multi-agent usage
-    web_port = config.web_port
-    agent_name = os.environ.get("TERMINAL_CONTROL_AGENT_NAME")
-    if agent_name:
-        # Add agent name hash to port to avoid conflicts
-        import hashlib
+    # Determine web server port
+    web_port = _get_effective_web_port()
 
-        agent_hash = int(hashlib.md5(agent_name.encode()).hexdigest()[:4], 16)
-        web_port = config.web_port + (agent_hash % 1000)
-        logger.info(f"Using port {web_port} for agent '{agent_name}'")
-
-    web_server = WebServer(session_manager, port=web_port, agent_name=agent_name)
+    web_server = WebServer(session_manager, port=web_port)
     web_task = asyncio.create_task(web_server.start())
     logger.info(f"Web interface available at http://{config.web_host}:{web_port}")
     return web_server, web_task
@@ -177,15 +169,22 @@ def _get_display_web_host() -> str:
     return web_host
 
 
-def _get_web_port_for_agent() -> int:
-    """Get the web port, adjusted for agent if needed"""
-    agent_name = os.environ.get("TERMINAL_CONTROL_AGENT_NAME")
-    if agent_name:
-        import hashlib
+def _get_effective_web_port() -> int:
+    """Get the effective web port, using auto-selection if enabled"""
+    if not config.web_auto_port:
+        return config.web_port
 
-        agent_hash = int(hashlib.md5(agent_name.encode()).hexdigest()[:4], 16)
-        return config.web_port + (agent_hash % 1000)
-    return config.web_port
+    # Generate unique identifier based on current working directory and process ID
+    import hashlib
+
+    unique_id = f"{os.getcwd()}:{os.getpid()}"
+    hash_value = int(hashlib.md5(unique_id.encode()).hexdigest()[:4], 16)
+
+    # Use port range 9000-9999 for auto-selected ports (safer range)
+    auto_port = 9000 + (hash_value % 1000)
+
+    logger.info(f"Auto-selected port {auto_port} (web_auto_port=true)")
+    return auto_port
 
 
 # Create FastMCP server with lifespan management
@@ -229,7 +228,7 @@ async def list_terminal_sessions(ctx: Context) -> ListSessionsResponse:
     # Add web URLs for user access (agent can share these with users)
     if session_list and WEB_INTERFACE_AVAILABLE and config.web_enabled:
         web_host = _get_display_web_host()
-        web_port = _get_web_port_for_agent()
+        web_port = _get_effective_web_port()
 
         logger.info(
             f"Sessions available via web interface at http://{web_host}:{web_port}/"
@@ -316,7 +315,7 @@ async def get_screen_content(
         # Log web interface URL for user access if available
         if config.web_enabled and WEB_INTERFACE_AVAILABLE:
             web_host = _get_display_web_host()
-            web_port = _get_web_port_for_agent()
+            web_port = _get_effective_web_port()
             session_url = f"http://{web_host}:{web_port}/session/{request.session_id}"
             logger.info(f"Session {request.session_id} web interface: {session_url}")
 
@@ -390,7 +389,7 @@ async def send_input(request: SendInputRequest, ctx: Context) -> SendInputRespon
 
         # Give a moment for the command to process and update the terminal
         await asyncio.sleep(config.terminal_send_input_delay)
-        
+
         # For exit commands, give extra time for tmux to detect shell exit
         if request.input_text.strip().lower() in ['exit', 'exit\n']:
             await asyncio.sleep(0.5)  # Extra delay for exit detection
@@ -441,7 +440,7 @@ async def _get_session_web_url(session_id: str) -> str | None:
         return None
 
     web_host = _get_display_web_host()
-    web_port = _get_web_port_for_agent()
+    web_port = _get_effective_web_port()
     web_url = f"http://{web_host}:{web_port}/session/{session_id}"
     logger.info(f"Terminal session {session_id} created. Web interface: {web_url}")
     return web_url
