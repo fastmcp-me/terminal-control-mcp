@@ -32,7 +32,7 @@ class ServerConfig:
     """Central configuration for the MCP server"""
 
     # Web server configuration
-    web_enabled: bool = True
+    web_enabled: bool = False
     web_host: str = "0.0.0.0"
     web_port: int = 8080
     external_web_host: str | None = None
