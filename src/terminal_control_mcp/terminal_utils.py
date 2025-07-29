@@ -63,6 +63,45 @@ def _prepare_environment() -> dict[str, str]:
 
     env = os.environ.copy()
     env["DISPLAY"] = env.get("DISPLAY", ":0")
+    
+    # Remove Snap-related environment variables to fix VS Code/Snap conflicts
+    # VS Code (Snap package) sets various environment variables that redirect
+    # system commands to use Snap's bundled libraries, causing symbol lookup errors
+    snap_vars_to_remove = [
+        "LD_LIBRARY_PATH",
+        "GTK_PATH", 
+        "GTK_EXE_PREFIX",
+        "GIO_MODULE_DIR",
+        "GSETTINGS_SCHEMA_DIR",
+        "GTK_IM_MODULE_FILE",
+        "LOCPATH",
+        "XDG_DATA_HOME",
+        "XDG_DATA_DIRS",
+    ]
+    
+    for var in snap_vars_to_remove:
+        env.pop(var, None)
+    
+    # Restore original values if they exist (VS Code saves originals with _VSCODE_SNAP_ORIG suffix)
+    snap_orig_vars = {
+        "XDG_CONFIG_DIRS": "XDG_CONFIG_DIRS_VSCODE_SNAP_ORIG",
+        "GDK_BACKEND": "GDK_BACKEND_VSCODE_SNAP_ORIG", 
+        "GIO_MODULE_DIR": "GIO_MODULE_DIR_VSCODE_SNAP_ORIG",
+        "GSETTINGS_SCHEMA_DIR": "GSETTINGS_SCHEMA_DIR_VSCODE_SNAP_ORIG",
+        "GTK_IM_MODULE_FILE": "GTK_IM_MODULE_FILE_VSCODE_SNAP_ORIG",
+        "XDG_DATA_HOME": "XDG_DATA_HOME_VSCODE_SNAP_ORIG",
+        "GTK_EXE_PREFIX": "GTK_EXE_PREFIX_VSCODE_SNAP_ORIG",
+        "GTK_PATH": "GTK_PATH_VSCODE_SNAP_ORIG",
+        "XDG_DATA_DIRS": "XDG_DATA_DIRS_VSCODE_SNAP_ORIG",
+        "LOCPATH": "LOCPATH_VSCODE_SNAP_ORIG",
+    }
+    
+    for env_var, orig_var in snap_orig_vars.items():
+        if orig_var in env and env[orig_var]:
+            env[env_var] = env[orig_var]
+        # Remove the _VSCODE_SNAP_ORIG variables as they're not needed
+        env.pop(orig_var, None)
+    
     return env
 
 
