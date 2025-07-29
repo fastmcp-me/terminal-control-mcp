@@ -57,7 +57,7 @@ class TestTOMLConfiguration:
                 config = ServerConfig.from_config_and_environment(None)
 
             # Test default values
-            assert config.web_enabled is True
+            assert config.web_enabled is False
             assert config.web_host == "0.0.0.0"
             assert config.web_port == DEFAULT_WEB_PORT
             assert config.external_web_host is None
@@ -269,7 +269,7 @@ port = "not a valid toml
             config = ServerConfig.from_config_and_environment(config_file)
 
             # Should still get default values despite malformed TOML
-            assert config.web_enabled is True
+            assert config.web_enabled is False
             assert config.web_port == DEFAULT_WEB_PORT
 
         finally:

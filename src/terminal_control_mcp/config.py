@@ -74,79 +74,82 @@ class ServerConfig:
         4. /etc/terminal-control.toml
         """
         config_data = cls._load_toml_config(config_file)
+        
+        # Start with class defaults - single source of truth
+        defaults = cls()
 
         return cls(
             # Web server
             web_enabled=cls._get_bool_value(
                 "TERMINAL_CONTROL_WEB_ENABLED",
-                config_data.get("web", {}).get("enabled", True),
+                config_data.get("web", {}).get("enabled", defaults.web_enabled),
             ),
             web_host=cls._get_str_value(
                 "TERMINAL_CONTROL_WEB_HOST",
-                config_data.get("web", {}).get("host", "0.0.0.0"),
+                config_data.get("web", {}).get("host", defaults.web_host),
             )
-            or "0.0.0.0",
+            or defaults.web_host,
             web_port=cls._get_int_value(
                 "TERMINAL_CONTROL_WEB_PORT",
-                config_data.get("web", {}).get("port", 8080),
+                config_data.get("web", {}).get("port", defaults.web_port),
             ),
             external_web_host=cls._get_str_value(
                 "TERMINAL_CONTROL_EXTERNAL_HOST",
-                config_data.get("web", {}).get("external_host"),
+                config_data.get("web", {}).get("external_host", defaults.external_web_host),
             ),
             # Security
             security_level=cls._get_security_level(
                 "TERMINAL_CONTROL_SECURITY_LEVEL",
-                config_data.get("security", {}).get("level", "high"),
+                config_data.get("security", {}).get("level", defaults.security_level.value),
             ),
             max_calls_per_minute=cls._get_int_value(
                 "TERMINAL_CONTROL_MAX_CALLS_PER_MINUTE",
-                config_data.get("security", {}).get("max_calls_per_minute", 60),
+                config_data.get("security", {}).get("max_calls_per_minute", defaults.max_calls_per_minute),
             ),
             max_sessions=cls._get_int_value(
                 "TERMINAL_CONTROL_MAX_SESSIONS",
-                config_data.get("security", {}).get("max_sessions", 50),
+                config_data.get("security", {}).get("max_sessions", defaults.max_sessions),
             ),
             # Sessions
             default_shell=cls._get_str_value(
                 "TERMINAL_CONTROL_DEFAULT_SHELL",
-                config_data.get("session", {}).get("default_shell", "bash"),
+                config_data.get("session", {}).get("default_shell", defaults.default_shell),
             )
-            or "bash",
+            or defaults.default_shell,
             session_timeout=cls._get_int_value(
                 "TERMINAL_CONTROL_SESSION_TIMEOUT",
-                config_data.get("session", {}).get("timeout", 30),
+                config_data.get("session", {}).get("timeout", defaults.session_timeout),
             ),
             # Logging
             log_level=cls._get_str_value(
                 "TERMINAL_CONTROL_LOG_LEVEL",
-                config_data.get("logging", {}).get("level", "INFO"),
+                config_data.get("logging", {}).get("level", defaults.log_level),
             )
-            or "INFO",
+            or defaults.log_level,
             # Terminal
             terminal_width=cls._get_int_value(
                 "TERMINAL_CONTROL_TERMINAL_WIDTH",
-                config_data.get("terminal", {}).get("width", 120),
+                config_data.get("terminal", {}).get("width", defaults.terminal_width),
             ),
             terminal_height=cls._get_int_value(
                 "TERMINAL_CONTROL_TERMINAL_HEIGHT",
-                config_data.get("terminal", {}).get("height", 30),
+                config_data.get("terminal", {}).get("height", defaults.terminal_height),
             ),
             terminal_close_timeout=cls._get_float_value(
                 "TERMINAL_CONTROL_TERMINAL_CLOSE_TIMEOUT",
-                config_data.get("terminal", {}).get("close_timeout", 5.0),
+                config_data.get("terminal", {}).get("close_timeout", defaults.terminal_close_timeout),
             ),
             terminal_process_check_timeout=cls._get_float_value(
                 "TERMINAL_CONTROL_TERMINAL_PROCESS_CHECK_TIMEOUT",
-                config_data.get("terminal", {}).get("process_check_timeout", 1.0),
+                config_data.get("terminal", {}).get("process_check_timeout", defaults.terminal_process_check_timeout),
             ),
             terminal_polling_interval=cls._get_float_value(
                 "TERMINAL_CONTROL_TERMINAL_POLLING_INTERVAL",
-                config_data.get("terminal", {}).get("polling_interval", 0.05),
+                config_data.get("terminal", {}).get("polling_interval", defaults.terminal_polling_interval),
             ),
             terminal_send_input_delay=cls._get_float_value(
                 "TERMINAL_CONTROL_TERMINAL_SEND_INPUT_DELAY",
-                config_data.get("terminal", {}).get("send_input_delay", 0.1),
+                config_data.get("terminal", {}).get("send_input_delay", defaults.terminal_send_input_delay),
             ),
             terminal_emulators=cls._get_terminal_emulators(
                 config_data.get("terminal", {}).get("emulators", [])

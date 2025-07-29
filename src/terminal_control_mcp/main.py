@@ -390,6 +390,10 @@ async def send_input(request: SendInputRequest, ctx: Context) -> SendInputRespon
 
         # Give a moment for the command to process and update the terminal
         await asyncio.sleep(config.terminal_send_input_delay)
+        
+        # For exit commands, give extra time for tmux to detect shell exit
+        if request.input_text.strip().lower() in ['exit', 'exit\n']:
+            await asyncio.sleep(0.5)  # Extra delay for exit detection
 
         # Capture current screen content after input (use screen mode)
         screen_content = await session.get_current_screen_content()
