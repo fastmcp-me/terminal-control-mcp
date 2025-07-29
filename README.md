@@ -373,7 +373,7 @@ Using the included `examples/example_debug.py`:
 "We found the bug! Clean up this debugging session"
 ```
 
-**Pro tip:** The MCP server logs web interface URLs that you can use to view and interact with the same debugger session in your browser.
+**Pro tip:** If you set `web_enabled=true` in your configuration, you can also access the debugging session directly in your browser for real-time interaction.
 
 ### **Web Interface Usage**
 
