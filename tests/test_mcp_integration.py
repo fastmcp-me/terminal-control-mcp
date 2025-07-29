@@ -192,7 +192,7 @@ class TestMCPIntegration:
             assert screen_result.success
 
             # Send safe input
-            input_request = SendInputRequest(session_id=session_id, input_text="Alice")
+            input_request = SendInputRequest(session_id=session_id, input_text="Alice\\n")
             input_result = await send_input(input_request, mock_context)
             assert input_result.success
 
@@ -278,13 +278,13 @@ class TestMCPIntegration:
             safe_commands = ["import math", "print(math.pi)", "x = 2 + 3", "print(x)"]
 
             for cmd in safe_commands:
-                input_request = SendInputRequest(session_id=session_id, input_text=cmd)
+                input_request = SendInputRequest(session_id=session_id, input_text=cmd + "\\n")
                 result = await send_input(input_request, mock_context)
                 assert result.success
                 await asyncio.sleep(0.2)
 
             # Exit Python
-            exit_request = SendInputRequest(session_id=session_id, input_text="exit()")
+            exit_request = SendInputRequest(session_id=session_id, input_text="exit()\\n")
             await send_input(exit_request, mock_context)
 
         finally:
@@ -531,7 +531,7 @@ class TestContentModeIntegration:
             # Send some input
             input_request = SendInputRequest(
                 session_id=session_id,
-                input_text="echo 'Test output for since_input mode'",
+                input_text="echo 'Test output for since_input mode'\\n",
             )
             input_response = await send_input(input_request, mock_context)
             assert input_response.success is True

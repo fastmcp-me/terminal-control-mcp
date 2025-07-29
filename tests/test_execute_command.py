@@ -42,7 +42,7 @@ class TestBasicCommands:
         # Send echo command to the shell
         if result.success and result.session_id:
             input_request = SendInputRequest(
-                session_id=result.session_id, input_text="echo 'Hello World'"
+                session_id=result.session_id, input_text="echo 'Hello World'\\n"
             )
             await send_input(input_request, mock_context)
 
@@ -97,7 +97,7 @@ class TestBasicCommands:
         # Send whoami command to the shell
         if result.success and result.session_id:
             input_request = SendInputRequest(
-                session_id=result.session_id, input_text="whoami"
+                session_id=result.session_id, input_text="whoami\\n"
             )
             await send_input(input_request, mock_context)
 
@@ -132,7 +132,7 @@ class TestSessionManagement:
         if result.success and result.session_id:
             input_request = SendInputRequest(
                 session_id=result.session_id,
-                input_text="input('Press enter: '); print('done')",
+                input_text="input('Press enter: '); print('done')\\n",
             )
             await send_input(input_request, mock_context)
 
@@ -164,7 +164,7 @@ class TestInteractiveWorkflows:
         if result.success and result.session_id:
             input_request = SendInputRequest(
                 session_id=result.session_id,
-                input_text="name=input('Enter name: '); print(f'Hello {name}!')",
+                input_text="name=input('Enter name: '); print(f'Hello {name}!')\\n",
             )
             await send_input(input_request, mock_context)
 
@@ -180,7 +180,7 @@ class TestInteractiveWorkflows:
             if screen_result.process_running:
                 # Send input
                 input_request = SendInputRequest(
-                    session_id=session_id, input_text="Alice"
+                    session_id=session_id, input_text="Alice\\n"
                 )
                 input_result = await send_input(input_request, mock_context)
                 assert input_result.success
@@ -210,7 +210,7 @@ class TestInteractiveWorkflows:
         if result.success and result.session_id:
             input_request = SendInputRequest(
                 session_id=result.session_id,
-                input_text="choice=input('Continue? (y/n): '); print('Yes!' if choice=='y' else 'No!')",
+                input_text="choice=input('Continue? (y/n): '); print('Yes!' if choice=='y' else 'No!')\\n",
             )
             await send_input(input_request, mock_context)
 
@@ -225,7 +225,7 @@ class TestInteractiveWorkflows:
 
             if screen_result.process_running:
                 # Send input
-                input_request = SendInputRequest(session_id=session_id, input_text="y")
+                input_request = SendInputRequest(session_id=session_id, input_text="y\\n")
                 input_result = await send_input(input_request, mock_context)
                 assert input_result.success
 
@@ -274,7 +274,7 @@ class TestPythonREPL:
 
                 # Send input
                 input_request = SendInputRequest(
-                    session_id=session_id, input_text=input_text
+                    session_id=session_id, input_text=input_text + "\\n"
                 )
                 input_result = await send_input(input_request, mock_context)
                 assert input_result.success

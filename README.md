@@ -168,12 +168,29 @@ Each terminal session is accessible through a web interface that provides:
 
 ### ⚙️ **Configuration**
 
-The MCP server supports comprehensive configuration through environment variables. All settings are centralized and documented below:
+The MCP server supports comprehensive configuration through TOML configuration files and environment variables. All settings are centralized and documented below:
+
+#### 📋 **Configuration Methods**
+```bash
+# 1. TOML Configuration File (recommended)
+# Edit terminal-control.toml in project root
+# Provides structured configuration with validation
+
+# 2. Environment Variables (runtime override)
+# Environment variables take precedence over TOML settings
+# Use for deployment-specific overrides
+```
 
 #### 🌐 **Web Server Configuration**
 ```bash
 # Enable/disable web interface (default: true)
 export TERMINAL_CONTROL_WEB_ENABLED=true        # true/false, 1/0, yes/no, on/off
+
+# When web interface is DISABLED:
+# - Automatically opens terminal windows for sessions using system terminal emulator
+# - Supports gnome-terminal, konsole, xfce4-terminal, xterm, alacritty, kitty, and more
+# - Terminal windows attach directly to tmux sessions for seamless interaction
+# - Both user and MCP tools interact with the same terminal session transparently
 
 # Web server networking
 export TERMINAL_CONTROL_WEB_HOST=0.0.0.0        # Default: 0.0.0.0 (all interfaces)
@@ -276,6 +293,12 @@ Shows comprehensive session information:
 
 #### **`exit_terminal`**
 Terminate and cleanup a terminal session safely.
+
+**Bidirectional Session Destruction:**
+- **Agent-initiated**: When MCP tools call `exit_terminal`, the session is destroyed and terminal windows are closed
+- **User-initiated**: When users type `exit` in terminal sessions, the session is automatically detected as dead and cleaned up
+- **Automatic cleanup**: Background monitoring detects dead sessions every 5 seconds and removes them
+- **Terminal window management**: When web interface is disabled, closing sessions also closes associated terminal windows
 
 ### 🤖 Agent-Controlled Interaction (2 tools)
 
@@ -620,10 +643,12 @@ pytest tests/
 terminal-control-mcp/
 ├── src/terminal_control_mcp/
 │   ├── main.py                 # FastMCP server with 5 MCP tools
-│   ├── session_manager.py      # Terminal session lifecycle management
+│   ├── session_manager.py      # Terminal session lifecycle management with bidirectional cleanup
 │   ├── interactive_session.py  # Tmux/libtmux terminal process control
+│   ├── terminal_utils.py       # Terminal window management utilities
 │   ├── web_server.py          # FastAPI web interface with WebSocket
 │   ├── security.py            # Multi-layer security validation
+│   ├── config.py              # TOML configuration and environment handling
 │   ├── models.py              # Pydantic request/response models
 │   ├── interaction_logger.py   # Session interaction logging
 │   ├── automation_types.py     # Type definitions for automation
@@ -657,12 +682,15 @@ terminal-control-mcp/
 
 ## 🚀 Development Status
 
-- ✅ **Tmux Integration** - Complete libtmux-based terminal control
+- ✅ **Tmux Integration** - Complete libtmux-based terminal control with automatic window management
 - ✅ **Web Interface** - Real-time xterm.js with WebSocket synchronization
 - ✅ **Agent Control** - 5 MCP tools for complete session lifecycle management
+- ✅ **Terminal Window Management** - Automatic terminal window opening when web interface is disabled
+- ✅ **Bidirectional Session Destruction** - Sessions automatically cleaned up on shell exit or MCP tool calls
+- ✅ **TOML Configuration** - Structured configuration with environment variable overrides
 - ✅ **Security Layer** - Multi-layer input validation and audit logging
 - ✅ **Type Safety** - Full Pydantic model validation and mypy coverage
-- ✅ **Test Coverage** - 94 passing tests covering security, integration, edge cases, and content modes
+- ✅ **Test Coverage** - Comprehensive tests covering all features including lifecycle management
 - ✅ **Code Quality** - Clean architecture with black, ruff, and mypy validation
 - ✅ **Production Ready** - Reliable session management with proper cleanup
 

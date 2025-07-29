@@ -40,8 +40,17 @@ def security_manager():
 
 @pytest.fixture
 def session_manager():
-    """Create a SessionManager instance for testing"""
+    """Create a SessionManager instance for testing (sync version)"""
     return SessionManager()
+
+
+@pytest.fixture
+async def async_session_manager():
+    """Create a SessionManager instance for testing (async version with cleanup)"""
+    manager = SessionManager()
+    yield manager
+    # Clean up the manager after the test
+    await manager.shutdown()
 
 
 @pytest.fixture
@@ -55,10 +64,28 @@ def app_context(security_manager, session_manager):
 
 
 @pytest.fixture
+async def async_app_context(security_manager, async_session_manager):
+    """Create async application context with managers for integration tests"""
+    return SimpleNamespace(
+        security_manager=security_manager,
+        session_manager=async_session_manager,
+        web_server=None,  # Mock web server as None for tests
+    )
+
+
+@pytest.fixture
 def mock_context(app_context):
     """Create mock MCP context for tool call tests"""
     return SimpleNamespace(
         request_context=SimpleNamespace(lifespan_context=app_context)
+    )
+
+
+@pytest.fixture
+async def async_mock_context(async_app_context):
+    """Create async mock MCP context for tool call tests"""
+    return SimpleNamespace(
+        request_context=SimpleNamespace(lifespan_context=async_app_context)
     )
 
 

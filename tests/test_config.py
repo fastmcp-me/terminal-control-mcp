@@ -3,6 +3,7 @@
 import os
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -48,7 +49,12 @@ class TestTOMLConfiguration:
                 del os.environ[var]
 
         try:
-            config = ServerConfig.from_config_and_environment(None)
+            # Mock the config file loading to return empty config (forcing defaults)
+            with patch(
+                "src.terminal_control_mcp.config.ServerConfig._load_toml_config",
+                return_value={},
+            ):
+                config = ServerConfig.from_config_and_environment(None)
 
             # Test default values
             assert config.web_enabled is True
@@ -90,7 +96,7 @@ timeout = 60  # TEST_SESSION_TIMEOUT
 level = "DEBUG"
 """
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.toml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
             f.write(toml_content)
             config_file = f.name
 
@@ -123,7 +129,7 @@ port = 9090  # TEST_WEB_PORT_3
 level = "low"
 """
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.toml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
             f.write(toml_content)
             config_file = f.name
 
@@ -144,7 +150,7 @@ level = "low"
 
             # Environment should override TOML
             assert config.web_enabled is True  # env override
-            assert config.web_port == TEST_WEB_PORT_2      # env override
+            assert config.web_port == TEST_WEB_PORT_2  # env override
             assert config.security_level == SecurityLevel.HIGH  # env override
 
         finally:
@@ -171,7 +177,9 @@ level = "low"
             os.environ["TERMINAL_CONTROL_SECURITY_LEVEL"] = level_str
             try:
                 config = ServerConfig.from_config_and_environment(None)
-                assert config.security_level == expected, f"Failed for input: {level_str}"
+                assert (
+                    config.security_level == expected
+                ), f"Failed for input: {level_str}"
             finally:
                 del os.environ["TERMINAL_CONTROL_SECURITY_LEVEL"]
 
@@ -192,7 +200,9 @@ level = "low"
             os.environ["TERMINAL_CONTROL_WEB_ENABLED"] = false_val
             try:
                 config = ServerConfig.from_config_and_environment(None)
-                assert config.web_enabled is False, f"Failed for false value: {false_val}"
+                assert (
+                    config.web_enabled is False
+                ), f"Failed for false value: {false_val}"
             finally:
                 del os.environ["TERMINAL_CONTROL_WEB_ENABLED"]
 
@@ -236,6 +246,7 @@ level = "low"
         # Test that providing a specific non-existent file doesn't fall back to defaults
         # Create a temp directory that definitely doesn't exist
         import tempfile
+
         with tempfile.TemporaryDirectory() as temp_dir:
             non_existent_file = f"{temp_dir}/definitely_does_not_exist/config.toml"
             result = ServerConfig._load_toml_config(non_existent_file)
@@ -249,7 +260,7 @@ enabled = true  # Missing closing bracket
 port = "not a valid toml
 """
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.toml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
             f.write(malformed_toml)
             config_file = f.name
 

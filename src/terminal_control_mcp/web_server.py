@@ -88,7 +88,9 @@ class WebServer:
         current_dir = Path(__file__).parent
         templates_dir = current_dir / "templates"
         if templates_dir.exists():
-            logger.info(f"Falling back to source templates directory at: {templates_dir}")
+            logger.info(
+                f"Falling back to source templates directory at: {templates_dir}"
+            )
             self.templates = Jinja2Templates(directory=str(templates_dir))
             logger.info("Source templates successfully loaded")
         else:
@@ -105,7 +107,9 @@ class WebServer:
             static_path = resources.files("terminal_control_mcp") / "static"
             if static_path.is_dir():
                 logger.info(f"Using package static directory at: {static_path}")
-                self.app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
+                self.app.mount(
+                    "/static", StaticFiles(directory=str(static_path)), name="static"
+                )
                 return
         except (ImportError, FileNotFoundError):
             pass
@@ -115,7 +119,9 @@ class WebServer:
         static_dir = current_dir / "static"
         if static_dir.exists():
             logger.info(f"Using source static directory at: {static_dir}")
-            self.app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+            self.app.mount(
+                "/static", StaticFiles(directory=str(static_dir)), name="static"
+            )
 
     def _setup_routes(self) -> None:
         """Setup FastAPI routes"""
@@ -330,7 +336,11 @@ class WebServer:
         return websocket_stream_position
 
     async def _poll_incremental_updates(
-        self, session_id: str, session: InteractiveSession, websocket: WebSocket, stream_position: int
+        self,
+        session_id: str,
+        session: InteractiveSession,
+        websocket: WebSocket,
+        stream_position: int,
     ) -> None:
         """Poll for and send incremental updates"""
         websocket_stream_position = stream_position
@@ -347,7 +357,11 @@ class WebServer:
                 logger.debug(f"Error polling tmux stream output: {e}")
 
     async def _process_stream_update(
-        self, session_id: str, session: InteractiveSession, websocket: WebSocket, stream_position: int
+        self,
+        session_id: str,
+        session: InteractiveSession,
+        websocket: WebSocket,
+        stream_position: int,
     ) -> int:
         """Process a single stream update and return new position"""
         if not session.output_stream_file.exists():
@@ -368,7 +382,9 @@ class WebServer:
 
             # Update timestamp for MCP tools
             if session_id in self.xterm_terminals:
-                self.xterm_terminals[session_id]["last_update"] = asyncio.get_event_loop().time()
+                self.xterm_terminals[session_id][
+                    "last_update"
+                ] = asyncio.get_event_loop().time()
 
         return new_stream_position
 
@@ -587,5 +603,3 @@ class WebServer:
                 display_host = "localhost"
 
         return f"http://{display_host}:{self.port}/session/{session_id}"
-
-

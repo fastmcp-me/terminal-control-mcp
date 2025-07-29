@@ -39,6 +39,7 @@ from .models import (
 )
 from .security import SecurityManager
 from .session_manager import SessionManager
+from .terminal_utils import open_terminal_window
 from .web_server import WebServer
 
 # Load configuration from TOML file and environment variables
@@ -102,6 +103,7 @@ async def _initialize_web_server(
     if agent_name:
         # Add agent name hash to port to avoid conflicts
         import hashlib
+
         agent_hash = int(hashlib.md5(agent_name.encode()).hexdigest()[:4], 16)
         web_port = config.web_port + (agent_hash % 1000)
         logger.info(f"Using port {web_port} for agent '{agent_name}'")
@@ -180,6 +182,7 @@ def _get_web_port_for_agent() -> int:
     agent_name = os.environ.get("TERMINAL_CONTROL_AGENT_NAME")
     if agent_name:
         import hashlib
+
         agent_hash = int(hashlib.md5(agent_name.encode()).hexdigest()[:4], 16)
         return config.web_port + (agent_hash % 1000)
     return config.web_port
@@ -345,6 +348,10 @@ async def send_input(request: SendInputRequest, ctx: Context) -> SendInputRespon
     - session_id: str - Session ID to send input to
     - input_text: str - Text to send (supports escape sequences: \\x03=Ctrl+C, \\x0a=Enter, \\x1b[A=Up arrow, \\x1b[B=Down arrow, \\x1b[C=Right arrow, \\x1b[D=Left arrow, \\x1b[H=Home, \\x1b[F=End, etc.)
 
+    IMPORTANT: Newlines are NOT added automatically. For commands that need to be executed,
+    you must explicitly include \\n at the end (e.g., "ls\\n", "python\\n", "exit\\n").
+    Without a newline, the input will appear at the prompt but won't execute.
+
     Returns SendInputResponse with:
     - success: bool - True if input was sent successfully
     - session_id: str - Echo of the requested session ID
@@ -362,7 +369,9 @@ async def send_input(request: SendInputRequest, ctx: Context) -> SendInputRespon
     if not app_ctx.security_manager.validate_tool_call(
         "send_input", request.model_dump()
     ):
-        raise ValueError("Security violation: Tool call rejected. If this command is safe, please enter it manually in the terminal.")
+        raise ValueError(
+            "Security violation: Tool call rejected. If this command is safe, please enter it manually in the terminal."
+        )
 
     session = await app_ctx.session_manager.get_session(request.session_id)
     if not session:
@@ -434,128 +443,9 @@ async def _get_session_web_url(session_id: str) -> str | None:
     return web_url
 
 
-def _detect_terminal_emulator() -> str | None:
-    """Detect available terminal emulator"""
-    terminal_emulators = [
-        # GNOME/GTK
-        ("gnome-terminal", ["gnome-terminal", "--"]),
-        # KDE
-        ("konsole", ["konsole", "-e"]),
-        # XFCE
-        ("xfce4-terminal", ["xfce4-terminal", "-e"]),
-        # Elementary OS
-        ("io.elementary.terminal", ["io.elementary.terminal", "-e"]),
-        # Generic
-        ("x-terminal-emulator", ["x-terminal-emulator", "-e"]),
-        ("xterm", ["xterm", "-e"]),
-        # macOS
-        ("Terminal", ["open", "-a", "Terminal"]),
-        # Fallback
-        ("alacritty", ["alacritty", "-e"]),
-        ("kitty", ["kitty"]),
-        ("terminator", ["terminator", "-e"]),
-    ]
-
-    for name, cmd in terminal_emulators:
-        if shutil.which(cmd[0]):
-            logger.info(f"Detected terminal emulator: {name}")
-            return cmd[0]
-
-    return None
-
-
-async def _open_terminal_window(session_id: str) -> bool:
-    """Open a terminal window that attaches to the tmux session"""
-    terminal_cmd = _detect_terminal_emulator()
-    if not terminal_cmd:
-        logger.warning("No terminal emulator found - user will need to manually attach with: tmux attach -t " + session_id)
-        return False
-
-    try:
-        # Build the tmux session name (sessions are prefixed with 'mcp_')
-        tmux_session_name = f"mcp_{session_id}"
-        
-        # Build command to attach to tmux session
-        if terminal_cmd == "open":  # macOS
-            cmd = ["open", "-a", "Terminal", "--args", "tmux", "attach-session", "-t", tmux_session_name]
-        elif terminal_cmd in ["gnome-terminal"]:
-            cmd = ["gnome-terminal", "--", "tmux", "attach-session", "-t", tmux_session_name]
-        elif terminal_cmd in ["konsole", "xfce4-terminal", "io.elementary.terminal", "x-terminal-emulator", "xterm", "alacritty", "terminator"]:
-            cmd = [terminal_cmd, "-e", "tmux", "attach-session", "-t", tmux_session_name]
-        elif terminal_cmd == "kitty":
-            cmd = ["kitty", "tmux", "attach-session", "-t", tmux_session_name]
-        else:
-            # Generic fallback
-            cmd = [terminal_cmd, "-e", "tmux", "attach-session", "-t", tmux_session_name]
-
-        # Spawn terminal window in background with proper environment
-        import os
-        env = os.environ.copy()
-        env['DISPLAY'] = env.get('DISPLAY', ':0')
-        
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.PIPE,
-            env=env
-        )
-        
-        # Wait a moment to check if it started successfully
-        try:
-            await asyncio.wait_for(process.wait(), timeout=1.0)
-            if process.returncode == 0:
-                logger.info(f"Terminal window opened successfully for session {session_id}")
-                return True
-            else:
-                stderr = await process.stderr.read()
-                logger.warning(f"Terminal window failed with return code {process.returncode}: {stderr.decode()}")
-                return False
-        except asyncio.TimeoutError:
-            # Process is still running, which is good - terminal is open
-            logger.info(f"Terminal window opened for session {session_id}: {' '.join(cmd)}")
-            return True
-
-    except Exception as e:
-        logger.warning(f"Failed to open terminal window for session {session_id}: {e}")
-        logger.info(f"User can manually attach with: tmux attach-session -t mcp_{session_id}")
-        return False
-
-
-async def _close_terminal_window(session_id: str) -> bool:
-    """Close terminal windows that are attached to the tmux session"""
-    try:
-        # Build the tmux session name (sessions are prefixed with 'mcp_')
-        tmux_session_name = f"mcp_{session_id}"
-        
-        # Use tmux to kill the session, which will close attached terminals  
-        cmd = ["tmux", "kill-session", "-t", tmux_session_name]
-        
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.PIPE
-        )
-        
-        # Wait for the command to complete
-        await asyncio.wait_for(process.wait(), timeout=5.0)
-        
-        if process.returncode == 0:
-            logger.info(f"Terminal window closed successfully for session {session_id}")
-            return True
-        else:
-            stderr = await process.stderr.read()
-            logger.warning(f"Failed to close terminal window for session {session_id}: {stderr.decode()}")
-            return False
-            
-    except asyncio.TimeoutError:
-        logger.warning(f"Timeout closing terminal window for session {session_id}")
-        return False
-    except Exception as e:
-        logger.error(f"Error closing terminal window for session {session_id}: {e}")
-        return False
-
-
-async def _get_initial_screen_content(app_ctx: AppContext, session_id: str) -> str | None:
+async def _get_initial_screen_content(
+    app_ctx: AppContext, session_id: str
+) -> str | None:
     """Get initial screen content from a session"""
     session = await app_ctx.session_manager.get_session(session_id)
     if not session:
@@ -597,7 +487,9 @@ async def open_terminal(
     if not app_ctx.security_manager.validate_tool_call(
         "open_terminal", request.model_dump()
     ):
-        raise ValueError("Security violation: Tool call rejected. If this configuration is safe, please create the terminal manually.")
+        raise ValueError(
+            "Security violation: Tool call rejected. If this configuration is safe, please create the terminal manually."
+        )
 
     try:
         session_id = await _create_terminal_session(app_ctx, request)
@@ -606,7 +498,7 @@ async def open_terminal(
 
         # If web interface is disabled, automatically open a terminal window
         if not config.web_enabled:
-            terminal_opened = await _open_terminal_window(session_id)
+            terminal_opened = await open_terminal_window(session_id)
             if terminal_opened:
                 logger.info(f"Terminal window opened for session {session_id}")
             else:
@@ -644,4 +536,5 @@ def main_sync() -> None:
 
 
 if __name__ == "__main__":
+    # it feels like the emulators in `detect_terminal_emulator` in terminal_utils.py should not be hard-coded but part of the configuration file. anything else like this?
     main_sync()

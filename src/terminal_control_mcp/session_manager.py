@@ -40,12 +40,11 @@ class SessionManager:
         self.max_sessions = max_sessions
         self.default_timeout = default_timeout
         self._cleanup_task: asyncio.Task[None] | None = None
-        self._shutdown_event = asyncio.Event()
+        self._shutdown_event: asyncio.Event | None = None
+        self._cleanup_task_started = False
         logger.info(
             f"SessionManager initialized with max_sessions={max_sessions}, default_timeout={default_timeout}"
         )
-        # Start background cleanup task
-        self._start_cleanup_task()
 
     async def create_session(
         self,
@@ -55,6 +54,9 @@ class SessionManager:
         working_directory: str | None = None,
     ) -> str:
         """Create a new interactive session"""
+        # Ensure cleanup task is running now that we have an event loop
+        self._ensure_cleanup_task_running()
+
         self._validate_session_creation()
         session_id = self._generate_session_id(command)
         session = self._create_session_object(
@@ -148,70 +150,56 @@ class SessionManager:
         logger.debug(f"Session {session_id} not found")
         return None
 
-    async def destroy_session(self, session_id: str, close_terminal_window: bool = True) -> bool:
-        """Terminate and cleanup a session"""
-        if session_id in self.sessions:
-            logger.info(f"Destroying session {session_id}")
-            session = self.sessions[session_id]
-            
-            # Close terminal window if web is disabled and requested
-            if close_terminal_window:
-                try:
-                    from .config import ServerConfig
-                    config = ServerConfig.from_config_and_environment()
-                    if not config.web_enabled:
-                        await self._close_terminal_window(session_id)
-                except Exception as e:
-                    logger.warning(f"Error closing terminal window for session {session_id}: {e}")
-            
-            try:
-                await session.terminate()
-                logger.info(f"Session {session_id} terminated successfully")
-            except Exception as e:
-                logger.error(f"Error terminating session {session_id}: {e}")
+    async def _close_terminal_window_if_needed(
+        self, session_id: str, close_terminal_window: bool
+    ) -> None:
+        """Close terminal window if web is disabled and requested"""
+        if not close_terminal_window:
+            return
 
-            # Always cleanup from manager even if termination fails
-            del self.sessions[session_id]
-            del self.session_metadata[session_id]
-            logger.info(f"Session {session_id} removed from manager")
-            return True
-        logger.warning(f"Cannot destroy session {session_id}: not found")
-        return False
-
-    async def _close_terminal_window(self, session_id: str) -> bool:
-        """Close terminal windows that are attached to the tmux session"""
         try:
-            import asyncio
-            
-            # Build the tmux session name (sessions are prefixed with 'mcp_')
-            tmux_session_name = f"mcp_{session_id}"
-            
-            # Use tmux to kill the session, which will close attached terminals  
-            cmd = ["tmux", "kill-session", "-t", tmux_session_name]
-            
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.PIPE
-            )
-            
-            # Wait for the command to complete
-            await asyncio.wait_for(process.wait(), timeout=5.0)
-            
-            if process.returncode == 0:
-                logger.info(f"Terminal window closed successfully for session {session_id}")
-                return True
-            else:
-                stderr = await process.stderr.read()
-                logger.warning(f"Failed to close terminal window for session {session_id}: {stderr.decode()}")
-                return False
-                
-        except asyncio.TimeoutError:
-            logger.warning(f"Timeout closing terminal window for session {session_id}")
-            return False
+            from .config import ServerConfig
+            from .terminal_utils import close_terminal_window as close_window_func
+
+            config = ServerConfig.from_config_and_environment()
+            if not config.web_enabled:
+                await close_window_func(session_id)
         except Exception as e:
-            logger.error(f"Error closing terminal window for session {session_id}: {e}")
+            logger.warning(
+                f"Error closing terminal window for session {session_id}: {e}"
+            )
+
+    async def _terminate_session_process(
+        self, session_id: str, session: "InteractiveSession"
+    ) -> None:
+        """Terminate the session process"""
+        try:
+            await session.terminate()
+            logger.info(f"Session {session_id} terminated successfully")
+        except Exception as e:
+            logger.error(f"Error terminating session {session_id}: {e}")
+
+    def _cleanup_session_from_manager(self, session_id: str) -> None:
+        """Remove session from manager storage"""
+        del self.sessions[session_id]
+        del self.session_metadata[session_id]
+        logger.info(f"Session {session_id} removed from manager")
+
+    async def destroy_session(
+        self, session_id: str, close_terminal_window: bool = True
+    ) -> bool:
+        """Terminate and cleanup a session"""
+        if session_id not in self.sessions:
+            logger.warning(f"Cannot destroy session {session_id}: not found")
             return False
+
+        logger.info(f"Destroying session {session_id}")
+        session = self.sessions[session_id]
+
+        await self._close_terminal_window_if_needed(session_id, close_terminal_window)
+        await self._terminate_session_process(session_id, session)
+        self._cleanup_session_from_manager(session_id)
+        return True
 
     async def list_sessions(self) -> list[SessionMetadata]:
         """List all active sessions"""
@@ -219,37 +207,65 @@ class SessionManager:
         logger.debug(f"Listed {len(sessions)} active sessions")
         return sessions
 
-    def _start_cleanup_task(self) -> None:
-        """Start the background cleanup task"""
-        if self._cleanup_task is None or self._cleanup_task.done():
-            self._cleanup_task = asyncio.create_task(self._cleanup_dead_sessions())
-            logger.info("Background cleanup task started")
+    def _ensure_cleanup_task_running(self) -> None:
+        """Ensure the background cleanup task is running (lazy initialization)"""
+        if self._cleanup_task_started:
+            return
+
+        try:
+            # Initialize shutdown event if not already done
+            if self._shutdown_event is None:
+                self._shutdown_event = asyncio.Event()
+
+            # Start cleanup task if not already running
+            if self._cleanup_task is None or self._cleanup_task.done():
+                self._cleanup_task = asyncio.create_task(self._cleanup_dead_sessions())
+                self._cleanup_task_started = True
+                logger.info("Background cleanup task started")
+        except RuntimeError:
+            # No event loop running - will start when one becomes available
+            logger.debug("No event loop available yet - cleanup task will start later")
+
+    def _check_session_health(
+        self, session_id: str, session: "InteractiveSession"
+    ) -> bool:
+        """Check if a session is alive, returning False if dead or error"""
+        try:
+            return session.is_process_alive()
+        except Exception as e:
+            logger.error(f"Error checking session {session_id} health: {e}")
+            return False
+
+    def _mark_session_as_terminated(self, session_id: str) -> None:
+        """Mark session metadata as terminated"""
+        if session_id in self.session_metadata:
+            self.session_metadata[session_id].state = SessionState.TERMINATED
+
+    def _find_dead_sessions(self) -> list[str]:
+        """Find all dead sessions that need cleanup"""
+        dead_sessions = []
+        for session_id, session in list(self.sessions.items()):
+            if not self._check_session_health(session_id, session):
+                logger.info(f"Detected dead session {session_id}")
+                dead_sessions.append(session_id)
+                self._mark_session_as_terminated(session_id)
+        return dead_sessions
 
     async def _cleanup_dead_sessions(self) -> None:
         """Background task to monitor and cleanup dead sessions"""
+        # Ensure shutdown event is initialized
+        if self._shutdown_event is None:
+            self._shutdown_event = asyncio.Event()
+
         while not self._shutdown_event.is_set():
             try:
-                # Check for dead sessions every 5 seconds
-                await asyncio.sleep(5)
-                
-                dead_sessions = []
-                for session_id, session in list(self.sessions.items()):
-                    try:
-                        if not session.is_process_alive():
-                            logger.info(f"Detected dead session {session_id}")
-                            dead_sessions.append(session_id)
-                            # Update metadata state
-                            if session_id in self.session_metadata:
-                                self.session_metadata[session_id].state = SessionState.TERMINATED
-                    except Exception as e:
-                        logger.error(f"Error checking session {session_id} health: {e}")
-                        dead_sessions.append(session_id)
-                
-                # Clean up dead sessions
+                await asyncio.sleep(5)  # Check for dead sessions every 5 seconds
+
+                dead_sessions = self._find_dead_sessions()
                 for session_id in dead_sessions:
                     logger.info(f"Auto-cleaning up dead session {session_id}")
                     await self.destroy_session(session_id)
-                    
+
             except asyncio.CancelledError:
                 logger.info("Cleanup task cancelled")
                 break
@@ -260,18 +276,22 @@ class SessionManager:
     async def shutdown(self) -> None:
         """Shutdown the session manager and cleanup resources"""
         logger.info("Shutting down SessionManager")
+
+        # Initialize shutdown event if not already done
+        if self._shutdown_event is None:
+            self._shutdown_event = asyncio.Event()
         self._shutdown_event.set()
-        
+
         if self._cleanup_task and not self._cleanup_task.done():
             self._cleanup_task.cancel()
             try:
                 await self._cleanup_task
             except asyncio.CancelledError:
                 pass
-        
+
         # Destroy all remaining sessions
         session_ids = list(self.sessions.keys())
         for session_id in session_ids:
             await self.destroy_session(session_id)
-        
+
         logger.info("SessionManager shutdown complete")

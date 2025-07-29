@@ -46,7 +46,9 @@ class ServerConfig:
     # Note: agent_name is handled dynamically per connection, not in static config
 
     @classmethod
-    def from_config_and_environment(cls, config_file: str | None = None) -> "ServerConfig":
+    def from_config_and_environment(
+        cls, config_file: str | None = None
+    ) -> "ServerConfig":
         """Create configuration from TOML config file and environment variables
 
         Environment variables take precedence over config file values.
@@ -60,19 +62,52 @@ class ServerConfig:
 
         return cls(
             # Web server
-            web_enabled=cls._get_bool_value("TERMINAL_CONTROL_WEB_ENABLED", config_data.get("web", {}).get("enabled", True)),
-            web_host=cls._get_str_value("TERMINAL_CONTROL_WEB_HOST", config_data.get("web", {}).get("host", "0.0.0.0")) or "0.0.0.0",
-            web_port=cls._get_int_value("TERMINAL_CONTROL_WEB_PORT", config_data.get("web", {}).get("port", 8080)),
-            external_web_host=cls._get_str_value("TERMINAL_CONTROL_EXTERNAL_HOST", config_data.get("web", {}).get("external_host")),
+            web_enabled=cls._get_bool_value(
+                "TERMINAL_CONTROL_WEB_ENABLED",
+                config_data.get("web", {}).get("enabled", True),
+            ),
+            web_host=cls._get_str_value(
+                "TERMINAL_CONTROL_WEB_HOST",
+                config_data.get("web", {}).get("host", "0.0.0.0"),
+            )
+            or "0.0.0.0",
+            web_port=cls._get_int_value(
+                "TERMINAL_CONTROL_WEB_PORT",
+                config_data.get("web", {}).get("port", 8080),
+            ),
+            external_web_host=cls._get_str_value(
+                "TERMINAL_CONTROL_EXTERNAL_HOST",
+                config_data.get("web", {}).get("external_host"),
+            ),
             # Security
-            security_level=cls._get_security_level("TERMINAL_CONTROL_SECURITY_LEVEL", config_data.get("security", {}).get("level", "high")),
-            max_calls_per_minute=cls._get_int_value("TERMINAL_CONTROL_MAX_CALLS_PER_MINUTE", config_data.get("security", {}).get("max_calls_per_minute", 60)),
-            max_sessions=cls._get_int_value("TERMINAL_CONTROL_MAX_SESSIONS", config_data.get("security", {}).get("max_sessions", 50)),
+            security_level=cls._get_security_level(
+                "TERMINAL_CONTROL_SECURITY_LEVEL",
+                config_data.get("security", {}).get("level", "high"),
+            ),
+            max_calls_per_minute=cls._get_int_value(
+                "TERMINAL_CONTROL_MAX_CALLS_PER_MINUTE",
+                config_data.get("security", {}).get("max_calls_per_minute", 60),
+            ),
+            max_sessions=cls._get_int_value(
+                "TERMINAL_CONTROL_MAX_SESSIONS",
+                config_data.get("security", {}).get("max_sessions", 50),
+            ),
             # Sessions
-            default_shell=cls._get_str_value("TERMINAL_CONTROL_DEFAULT_SHELL", config_data.get("session", {}).get("default_shell", "bash")) or "bash",
-            session_timeout=cls._get_int_value("TERMINAL_CONTROL_SESSION_TIMEOUT", config_data.get("session", {}).get("timeout", 30)),
+            default_shell=cls._get_str_value(
+                "TERMINAL_CONTROL_DEFAULT_SHELL",
+                config_data.get("session", {}).get("default_shell", "bash"),
+            )
+            or "bash",
+            session_timeout=cls._get_int_value(
+                "TERMINAL_CONTROL_SESSION_TIMEOUT",
+                config_data.get("session", {}).get("timeout", 30),
+            ),
             # Logging
-            log_level=cls._get_str_value("TERMINAL_CONTROL_LOG_LEVEL", config_data.get("logging", {}).get("level", "INFO")) or "INFO",
+            log_level=cls._get_str_value(
+                "TERMINAL_CONTROL_LOG_LEVEL",
+                config_data.get("logging", {}).get("level", "INFO"),
+            )
+            or "INFO",
         )
 
     @classmethod
