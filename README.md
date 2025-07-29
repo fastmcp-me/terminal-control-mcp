@@ -12,7 +12,7 @@ A modern MCP server that enables AI agents to control terminal sessions through 
 - **Flexible Content Modes**: Get screen, history, since-input, or tail output for optimal workflow control
 - **Dual Access**: Both agent (MCP tools) and user (web browser) can interact simultaneously
 
-### 🌐 **Integrated Web Interface**
+### 🌐 **Optional Web Interface**
 - **Real-time Terminal**: Live xterm.js terminal emulator with WebSocket updates
 - **Session URLs**: Direct browser access to any terminal session
 - **Zero Setup**: Automatic web server startup with configurable networking
