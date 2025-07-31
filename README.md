@@ -48,11 +48,28 @@ sudo yum install tmux  # or sudo dnf install tmux
 
 ### Installation
 
+#### **From PyPI (Recommended)**
+
 ```bash
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # Linux/macOS
-# .venv\Scripts\activate    # Windows
+# Install directly from PyPI
+pip install terminal-control-mcp
+```
+
+#### **From Source**
+
+```bash
+# Clone the repository
+git clone https://github.com/your-username/terminal-control-mcp.git
+cd terminal-control-mcp
+
+# Create virtual environment (choose one)
+python -m venv .venv          # Using standard venv
+# OR
+uv venv                       # Using uv (faster)
+
+# Activate virtual environment
+source .venv/bin/activate     # Linux/macOS
+# .venv\Scripts\activate      # Windows
 
 # Install the package
 pip install .
@@ -67,8 +84,12 @@ The server supports configuration through TOML files and environment variables:
 
 #### **Claude Code (Anthropic)**
 
-1. **Install the package** (required for console script):
+1. **Install the package**:
    ```bash
+   # From PyPI (recommended)
+   pip install terminal-control-mcp
+   
+   # OR from source (if you cloned the repository)
    pip install .
    ```
 
