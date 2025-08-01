@@ -18,6 +18,7 @@ class SessionInfo(BaseModel):
     state: str
     created_at: float
     last_activity: float
+    web_url: str | None = Field(None, description="Web interface URL for this session (if web interface is enabled)")
 
 
 class ListSessionsResponse(BaseModel):

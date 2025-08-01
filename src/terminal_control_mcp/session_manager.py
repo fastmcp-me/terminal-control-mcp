@@ -129,6 +129,11 @@ class SessionManager:
     ) -> None:
         """Initialize the session"""
         await session.initialize()
+        
+        # Wait for shell initialization to complete (including pyenv/nvm/etc.)
+        # This ensures the shell is ready to accept commands
+        await asyncio.sleep(0.5)  # Allow time for shell startup scripts
+        
         self.session_metadata[session_id].state = SessionState.ACTIVE
         logger.info(f"Session {session_id} successfully initialized and active")
 

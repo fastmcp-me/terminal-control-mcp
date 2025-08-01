@@ -33,7 +33,7 @@ class TestBasicCommands:
     @pytest.mark.asyncio
     async def test_echo_command(self, mock_context):
         """Test simple echo command"""
-        request = OpenTerminalRequest(shell="bash", execution_timeout=30)
+        request = OpenTerminalRequest(shell="bash")
         result = await open_terminal(request, mock_context)
 
         assert result.success
@@ -61,7 +61,7 @@ class TestBasicCommands:
     @pytest.mark.asyncio
     async def test_python_version(self, mock_context):
         """Test Python version command"""
-        request = OpenTerminalRequest(shell="bash", execution_timeout=30)
+        request = OpenTerminalRequest(shell="bash")
         result = await open_terminal(request, mock_context)
 
         assert result.success
@@ -89,7 +89,7 @@ class TestBasicCommands:
     @pytest.mark.asyncio
     async def test_whoami_command(self, mock_context):
         """Test whoami command"""
-        request = OpenTerminalRequest(shell="bash", execution_timeout=30)
+        request = OpenTerminalRequest(shell="bash")
         result = await open_terminal(request, mock_context)
 
         assert result.success
@@ -123,7 +123,7 @@ class TestSessionManagement:
     async def test_create_and_destroy_session(self, mock_context):
         """Test creating and destroying a session"""
         # Create session
-        request = OpenTerminalRequest(shell="python3", execution_timeout=60)
+        request = OpenTerminalRequest(shell="python3")
         result = await open_terminal(request, mock_context)
         assert result.success
         session_id = result.session_id
@@ -155,7 +155,7 @@ class TestInteractiveWorkflows:
     async def test_python_input_workflow(self, mock_context):
         """Test Python interactive input workflow"""
         # Start interactive command
-        request = OpenTerminalRequest(shell="python3", execution_timeout=60)
+        request = OpenTerminalRequest(shell="python3")
         result = await open_terminal(request, mock_context)
         assert result.success
         session_id = result.session_id
@@ -201,7 +201,7 @@ class TestInteractiveWorkflows:
     async def test_python_choice_workflow(self, mock_context):
         """Test Python choice workflow"""
         # Start interactive command
-        request = OpenTerminalRequest(shell="python3", execution_timeout=60)
+        request = OpenTerminalRequest(shell="python3")
         result = await open_terminal(request, mock_context)
         assert result.success
         session_id = result.session_id
@@ -245,7 +245,7 @@ class TestPythonREPL:
     async def test_python_repl_workflow(self, mock_context):
         """Test Python REPL as a complex interactive workflow"""
         # Start Python REPL
-        request = OpenTerminalRequest(shell="python3", execution_timeout=60)
+        request = OpenTerminalRequest(shell="python3")
         result = await open_terminal(request, mock_context)
         assert result.success
         session_id = result.session_id

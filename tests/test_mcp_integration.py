@@ -47,7 +47,7 @@ class TestMCPIntegration:
         ]
 
         for command, expected_content in test_commands:
-            request = OpenTerminalRequest(shell="bash", execution_timeout=30)
+            request = OpenTerminalRequest(shell="bash")
             result = await open_terminal(request, mock_context)
 
             assert result.success, "Failed to open terminal"
@@ -150,7 +150,7 @@ class TestMCPIntegration:
         initial_count = len(sessions.sessions)
 
         # Start a session with a safe command
-        request = OpenTerminalRequest(shell="python3", execution_timeout=60)
+        request = OpenTerminalRequest(shell="python3")
         result = await open_terminal(request, mock_context)
         assert result.success
         session_id = result.session_id
@@ -177,7 +177,7 @@ class TestMCPIntegration:
     async def test_interactive_workflow_with_security(self, mock_context):
         """Test interactive workflow with input validation"""
         # Start interactive Python session
-        request = OpenTerminalRequest(shell="python3", execution_timeout=60)
+        request = OpenTerminalRequest(shell="python3")
         result = await open_terminal(request, mock_context)
         assert result.success
         session_id = result.session_id
@@ -205,7 +205,7 @@ class TestMCPIntegration:
     async def test_dangerous_input_blocking(self, mock_context):
         """Test that dangerous input is blocked"""
         # Start a simple interactive session
-        request = OpenTerminalRequest(shell="python3", execution_timeout=60)
+        request = OpenTerminalRequest(shell="python3")
         result = await open_terminal(request, mock_context)
         assert result.success
         session_id = result.session_id
@@ -266,7 +266,7 @@ class TestMCPIntegration:
     @pytest.mark.asyncio
     async def test_python_repl_security(self, mock_context):
         """Test Python REPL with security considerations"""
-        request = OpenTerminalRequest(shell="python3", execution_timeout=60)
+        request = OpenTerminalRequest(shell="python3")
         result = await open_terminal(request, mock_context)
         assert result.success
         session_id = result.session_id
@@ -299,7 +299,7 @@ class TestMCPIntegration:
     async def test_error_handling_and_cleanup(self, mock_context):
         """Test proper error handling and session cleanup"""
         # Start a session
-        request = OpenTerminalRequest(shell="bash", execution_timeout=60)
+        request = OpenTerminalRequest(shell="bash")
         result = await open_terminal(request, mock_context)
         assert result.success
         session_id = result.session_id

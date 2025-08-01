@@ -200,7 +200,7 @@ async def list_terminal_sessions(ctx: Context) -> ListSessionsResponse:
 
     Returns ListSessionsResponse with:
     - success: bool - Operation success status
-    - sessions: List[SessionInfo] - List of active sessions with session_id, command, state, timestamps
+    - sessions: List[SessionInfo] - List of active sessions with session_id, command, state, timestamps, and web URLs (if web interface enabled)
     - total_sessions: int - Total number of active sessions (max 50)
 
     Use with: `get_screen_content`, `send_input`, `exit_terminal`
@@ -209,6 +209,13 @@ async def list_terminal_sessions(ctx: Context) -> ListSessionsResponse:
 
     sessions = await app_ctx.session_manager.list_sessions()
 
+    # Determine if we should include web URLs
+    web_host = None
+    web_port = None
+    if WEB_INTERFACE_AVAILABLE and config.web_enabled:
+        web_host = _get_display_web_host()
+        web_port = _get_effective_web_port()
+
     session_list = [
         SessionInfo(
             session_id=session.session_id,
@@ -216,28 +223,23 @@ async def list_terminal_sessions(ctx: Context) -> ListSessionsResponse:
             state=session.state.value,
             created_at=session.created_at,
             last_activity=session.last_activity,
+            web_url=f"http://{web_host}:{web_port}/session/{session.session_id}" if web_host and web_port else None,
         )
         for session in sessions
     ]
 
-    # Add web interface information to the response
-    response = ListSessionsResponse(
-        success=True, sessions=session_list, total_sessions=len(session_list)
-    )
-
-    # Add web URLs for user access (agent can share these with users)
-    if session_list and WEB_INTERFACE_AVAILABLE and config.web_enabled:
-        web_host = _get_display_web_host()
-        web_port = _get_effective_web_port()
-
+    # Log web interface information
+    if session_list and web_host and web_port:
         logger.info(
             f"Sessions available via web interface at http://{web_host}:{web_port}/"
         )
         for session in session_list:
-            session_url = f"http://{web_host}:{web_port}/session/{session.session_id}"
-            logger.info(f"Session {session.session_id}: {session_url}")
+            if session.web_url:
+                logger.info(f"Session {session.session_id}: {session.web_url}")
 
-    return response
+    return ListSessionsResponse(
+        success=True, sessions=session_list, total_sessions=len(session_list)
+    )
 
 
 @mcp.tool()
@@ -530,6 +532,22 @@ async def open_terminal(
 
 def main() -> None:
     """Entry point for the server"""
+    # Check if running in an interactive terminal (user ran it manually)
+    if sys.stdout.isatty() and sys.stdin.isatty():
+        print("\n⚠️  Terminal Control MCP Server")
+        print("=" * 40)
+        print("This is an MCP (Model Context Protocol) server that requires")
+        print("an MCP client to run. You cannot run it directly from the command line.")
+        print("\n📋 Setup Instructions:")
+        print("\n1. For Claude Code (Anthropic):")
+        print("   claude mcp add terminal-control -s user terminal-control-mcp")
+        print("\n2. For other MCP clients, add to your configuration:")
+        print('   {"mcpServers": {"terminal-control": {"command": "terminal-control-mcp"}}}')
+        print("\n3. The server will be automatically launched by your MCP client.")
+        print("\n💡 For more information, see: https://github.com/wehnsdaefflae/terminal-control-mcp")
+        print()
+        sys.exit(0)
+    
     mcp.run()
 
 

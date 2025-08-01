@@ -84,30 +84,15 @@ The server supports configuration through TOML files and environment variables:
 
 #### **Claude Code (Anthropic)**
 
-1. **Install the package**:
-   ```bash
-   # From PyPI (recommended)
-   pip install terminal-control-mcp
-   
-   # OR from source (if you cloned the repository)
-   pip install .
-   ```
+```bash
+# Add the MCP server
+claude mcp add terminal-control -s user terminal-control-mcp
 
-2. **Add the MCP server**:
-   ```bash
-   # Recommended: User scope (available across all projects)
-   claude mcp add terminal-control -s user terminal-control-mcp
-   
-   # Alternative: Project scope (current project only)
-   claude mcp add terminal-control terminal-control-mcp
-   ```
+# Verify installation
+claude mcp list
+```
 
-3. **Verify installation**:
-   ```bash
-   claude mcp list
-   ```
-
-The MCP server will be automatically launched by Claude Code when needed. The web interface starts automatically (if enabled) for direct session access.
+The MCP server will be automatically launched by Claude Code when needed.
 
 #### **Other MCP Clients**
 
@@ -126,39 +111,42 @@ For other MCP clients, add to your configuration:
 
 ## 🔧 Configuration
 
-### **Configuration Methods**
+The server uses TOML configuration files with optional environment variable overrides. Environment variables can override any TOML setting for deployment flexibility.
 
-The server supports two configuration methods:
+### **Configuration File Locations**
 
-1. **TOML Configuration File** (recommended): `terminal-control.toml`
-2. **Environment Variables**: Override TOML settings for deployment
+The server looks for configuration files in this order:
+1. `./terminal-control.toml` (current working directory)
+2. `~/.config/terminal-control.toml` (user configuration directory)
+3. `/etc/terminal-control.toml` (system-wide configuration)
+4. Built-in defaults (if no config file found)
 
-### **Configuration Options**
+### **Configuration Sections**
 
-#### **Web Server**
-```bash
-# Enable/disable web interface (default: false)
-export TERMINAL_CONTROL_WEB_ENABLED=false
+#### **[web] - Web Interface Settings**
 
-# Web server networking
-export TERMINAL_CONTROL_WEB_HOST=0.0.0.0     # Default: bind to all interfaces
-export TERMINAL_CONTROL_WEB_PORT=8080        # Default port
-export TERMINAL_CONTROL_WEB_AUTO_PORT=true   # Automatic unique port selection
-export TERMINAL_CONTROL_EXTERNAL_HOST=server.example.com  # External hostname for URLs
+```toml
+[web]
+enabled = false         # Enable web interface (default: false)
+host = "0.0.0.0"       # Bind address (default: "0.0.0.0")
+port = 8080            # Port number (default: 8080)
+auto_port = true       # Automatic unique port selection (default: true)
+external_host = ""     # External hostname for URLs (optional)
 ```
 
 **Web Interface Modes:**
-- **Enabled** (`web_enabled=true`): Real-time web interface with xterm.js terminal emulator
-- **Disabled** (`web_enabled=false`): Automatically opens system terminal windows attached to tmux sessions
+- **Enabled**: Real-time web interface with xterm.js terminal emulator
+- **Disabled**: Automatically opens system terminal windows attached to tmux sessions
 
-#### **Security**
-```bash
-# Security level (default: high)
-export TERMINAL_CONTROL_SECURITY_LEVEL=high  # off, low, medium, high
+**Auto Port Selection:** When `auto_port=true`, ports are automatically selected in the 9000-9999 range using `hash(working_dir + process_id) % 1000 + 9000` to avoid conflicts between multiple instances.
 
-# Rate limiting and session limits
-export TERMINAL_CONTROL_MAX_CALLS_PER_MINUTE=60
-export TERMINAL_CONTROL_MAX_SESSIONS=50
+#### **[security] - Security Settings**
+
+```toml
+[security]
+level = "high"              # Security level: off, low, medium, high
+max_calls_per_minute = 60   # Rate limiting (calls per minute)
+max_sessions = 50           # Maximum concurrent sessions
 ```
 
 **Security Levels:**
@@ -167,30 +155,28 @@ export TERMINAL_CONTROL_MAX_SESSIONS=50
 - **`medium`**: Standard protection (blocks common dangerous commands)
 - **`high`**: Full protection (comprehensive validation and filtering)
 
-#### **Session Configuration**
-```bash
-# Default shell and timeout
-export TERMINAL_CONTROL_DEFAULT_SHELL=bash
-export TERMINAL_CONTROL_SESSION_TIMEOUT=30
+#### **[session] - Session Management**
+
+```toml
+[session]
+default_shell = "bash"   # Default shell for new sessions
+timeout = 30            # Session startup timeout (seconds)
 ```
 
-#### **Terminal Configuration**
-```bash
-# Terminal dimensions
-export TERMINAL_CONTROL_TERMINAL_WIDTH=120
-export TERMINAL_CONTROL_TERMINAL_HEIGHT=30
+#### **[terminal] - Terminal Settings**
 
-# Performance tuning
-export TERMINAL_CONTROL_TERMINAL_POLLING_INTERVAL=0.05
-export TERMINAL_CONTROL_TERMINAL_SEND_INPUT_DELAY=0.1
-
-# Process timeouts
-export TERMINAL_CONTROL_TERMINAL_CLOSE_TIMEOUT=5.0
-export TERMINAL_CONTROL_TERMINAL_PROCESS_CHECK_TIMEOUT=1.0
+```toml
+[terminal]
+width = 120                      # Terminal width (columns)
+height = 30                      # Terminal height (rows)
+close_timeout = 5.0              # Terminal close timeout (seconds)
+process_check_timeout = 1.0      # Process health check timeout (seconds)
+polling_interval = 0.05          # Output polling interval (seconds)
+send_input_delay = 0.1           # Delay after sending input (seconds)
 ```
 
 **Terminal Emulator Support:**
-The system automatically detects and uses available terminal emulators in order of preference:
+The system automatically detects available terminal emulators in order of preference:
 - **GNOME/GTK**: gnome-terminal
 - **KDE**: konsole  
 - **XFCE**: xfce4-terminal
@@ -200,43 +186,24 @@ The system automatically detects and uses available terminal emulators in order 
 - **Modern terminals**: alacritty, kitty, terminator
 
 **Custom Terminal Emulator Configuration:**
-You can customize terminal emulator preferences through the `[terminal]` section in `terminal-control.toml`:
-
 ```toml
 [terminal]
-# Terminal dimensions and performance settings
-width = 120
-height = 30
-close_timeout = 5.0
-process_check_timeout = 1.0
-polling_interval = 0.05
-send_input_delay = 0.1
-
-# Custom terminal emulator configuration (ordered by preference)
+# Custom terminal emulator preferences (ordered by preference)
 emulators = [
     { name = "my-terminal", command = ["my-terminal", "--exec"] },
     { name = "gnome-terminal", command = ["gnome-terminal", "--"] },
     { name = "konsole", command = ["konsole", "-e"] },
-    # ... other terminals
 ]
 ```
 
-#### **Multi-Instance Port Management**
+#### **[logging] - Logging Configuration**
 
-**Automatic Port Selection:**
-When multiple server instances run simultaneously, ports are automatically selected to avoid conflicts:
-
-```bash
-# Automatic port selection (default: enabled)
-export TERMINAL_CONTROL_WEB_AUTO_PORT=true
-
-# How it works:
-# - Base port: 9000-9999 range
-# - Selection: hash(working_dir + process_id) % 1000 + 9000
-# - Consistent: Same directory always gets same port
+```toml
+[logging]
+level = "INFO"    # Log level: DEBUG, INFO, WARNING, ERROR
 ```
 
-### **TOML Configuration Example**
+### **Complete Configuration Example**
 
 Create `terminal-control.toml` in your project root:
 

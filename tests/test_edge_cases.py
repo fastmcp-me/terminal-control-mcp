@@ -352,7 +352,7 @@ class TestAsyncEdgeCases:
         try:
             # Create multiple sessions rapidly
             for _ in range(5):
-                request = OpenTerminalRequest(shell="bash", execution_timeout=30)
+                request = OpenTerminalRequest(shell="bash")
                 result = await open_terminal(request, mock_context)
                 if result.success:
                     session_ids.append(result.session_id)
@@ -386,7 +386,7 @@ class TestAsyncEdgeCases:
     async def test_timeout_edge_cases(self, mock_context):
         """Test various timeout scenarios"""
         # Very short timeout
-        request = OpenTerminalRequest(shell="bash", execution_timeout=1)
+        request = OpenTerminalRequest(shell="bash")
 
         result = await open_terminal(request, mock_context)
         # May succeed or fail depending on timing
@@ -410,7 +410,7 @@ class TestAsyncEdgeCases:
     async def test_concurrent_operations_same_session(self, mock_context):
         """Test concurrent operations on the same session"""
         # Start a session
-        request = OpenTerminalRequest(shell="python3", execution_timeout=30)
+        request = OpenTerminalRequest(shell="python3")
         result = await open_terminal(request, mock_context)
 
         if not result.success:

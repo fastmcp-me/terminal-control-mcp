@@ -226,13 +226,14 @@ class InteractiveSession:
         try:
             loop = asyncio.get_event_loop()
             tmux_pane = self.tmux_pane
+            
+            # Use libtmux's capture_pane() method instead of cmd()
+            # This returns a list of strings representing the pane content
             content = await loop.run_in_executor(
-                None, lambda: tmux_pane.cmd("capture-pane", "-e", "-p")
+                None, lambda: tmux_pane.capture_pane()
             )
 
-            if hasattr(content, "stdout"):
-                raw_output = str(content.stdout)
-            elif isinstance(content, list) and len(content) > 0:
+            if isinstance(content, list):
                 raw_output = "\n".join(str(line) for line in content)
             else:
                 raw_output = str(content) if content else ""
