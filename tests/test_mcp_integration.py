@@ -192,7 +192,9 @@ class TestMCPIntegration:
             assert screen_result.success
 
             # Send safe input
-            input_request = SendInputRequest(session_id=session_id, input_text="Alice\n")
+            input_request = SendInputRequest(
+                session_id=session_id, input_text="Alice\n"
+            )
             input_result = await send_input(input_request, mock_context)
             assert input_result.success
 
@@ -278,13 +280,17 @@ class TestMCPIntegration:
             safe_commands = ["import math", "print(math.pi)", "x = 2 + 3", "print(x)"]
 
             for cmd in safe_commands:
-                input_request = SendInputRequest(session_id=session_id, input_text=cmd + "\n")
+                input_request = SendInputRequest(
+                    session_id=session_id, input_text=cmd + "\n"
+                )
                 result = await send_input(input_request, mock_context)
                 assert result.success
                 await asyncio.sleep(0.2)
 
             # Exit Python
-            exit_request = SendInputRequest(session_id=session_id, input_text="exit()\n")
+            exit_request = SendInputRequest(
+                session_id=session_id, input_text="exit()\n"
+            )
             await send_input(exit_request, mock_context)
 
         finally:
@@ -623,99 +629,119 @@ class TestWebInterfaceIntegration:
     @pytest.mark.asyncio
     async def test_list_sessions_with_web_urls_enabled(self, mock_context):
         """Test that list_terminal_sessions returns web URLs when web interface is enabled"""
-        from src.terminal_control_mcp.config import ServerConfig
         from unittest.mock import patch
-        
+
+        from src.terminal_control_mcp.config import ServerConfig
+
         # Mock web interface as enabled
-        with patch.object(
-            ServerConfig, 'from_config_and_environment',
-            return_value=type('Config', (), {
-                'web_enabled': True,
-                'web_host': 'localhost',
-                'web_port': 8080,
-                'external_web_host': None,
-                'web_auto_port': False
-            })()
-        ), patch('src.terminal_control_mcp.main.WEB_INTERFACE_AVAILABLE', True), \
-           patch('src.terminal_control_mcp.main.config') as mock_config:
-            
+        with (
+            patch.object(
+                ServerConfig,
+                "from_config_and_environment",
+                return_value=type(
+                    "Config",
+                    (),
+                    {
+                        "web_enabled": True,
+                        "web_host": "localhost",
+                        "web_port": 8080,
+                        "external_web_host": None,
+                        "web_auto_port": False,
+                    },
+                )(),
+            ),
+            patch("src.terminal_control_mcp.main.WEB_INTERFACE_AVAILABLE", True),
+            patch("src.terminal_control_mcp.main.config") as mock_config,
+        ):
+
             mock_config.web_enabled = True
-            mock_config.web_host = 'localhost' 
+            mock_config.web_host = "localhost"
             mock_config.web_port = 8080
             mock_config.external_web_host = None
             mock_config.web_auto_port = False
-            
+
             # Create a session
             request = OpenTerminalRequest(shell="bash")
             result = await open_terminal(request, mock_context)
             assert result.success
             session_id = result.session_id
-            
+
             try:
                 # List sessions and check for web URLs
                 sessions_response = await list_terminal_sessions(mock_context)
                 assert sessions_response.success
                 assert len(sessions_response.sessions) >= 1
-                
+
                 # Find our session
                 our_session = None
                 for session in sessions_response.sessions:
                     if session.session_id == session_id:
                         our_session = session
                         break
-                
+
                 assert our_session is not None
                 assert our_session.web_url is not None
-                assert f"http://localhost:8080/session/{session_id}" in our_session.web_url
-                
+                assert (
+                    f"http://localhost:8080/session/{session_id}" in our_session.web_url
+                )
+
             finally:
                 # Cleanup
                 destroy_request = DestroySessionRequest(session_id=session_id)
                 await exit_terminal(destroy_request, mock_context)
 
-    @pytest.mark.asyncio 
+    @pytest.mark.asyncio
     async def test_list_sessions_without_web_urls_disabled(self, mock_context):
         """Test that list_terminal_sessions returns None web URLs when web interface is disabled"""
-        from src.terminal_control_mcp.config import ServerConfig
         from unittest.mock import patch
-        
+
+        from src.terminal_control_mcp.config import ServerConfig
+
         # Mock web interface as disabled
-        with patch.object(
-            ServerConfig, 'from_config_and_environment',
-            return_value=type('Config', (), {
-                'web_enabled': False,
-                'web_host': 'localhost',
-                'web_port': 8080,
-                'external_web_host': None,
-                'web_auto_port': False
-            })()
-        ), patch('src.terminal_control_mcp.main.WEB_INTERFACE_AVAILABLE', False), \
-           patch('src.terminal_control_mcp.main.config') as mock_config:
-            
+        with (
+            patch.object(
+                ServerConfig,
+                "from_config_and_environment",
+                return_value=type(
+                    "Config",
+                    (),
+                    {
+                        "web_enabled": False,
+                        "web_host": "localhost",
+                        "web_port": 8080,
+                        "external_web_host": None,
+                        "web_auto_port": False,
+                    },
+                )(),
+            ),
+            patch("src.terminal_control_mcp.main.WEB_INTERFACE_AVAILABLE", False),
+            patch("src.terminal_control_mcp.main.config") as mock_config,
+        ):
+
             mock_config.web_enabled = False
-            
+
             # Create a session
             request = OpenTerminalRequest(shell="bash")
             result = await open_terminal(request, mock_context)
             assert result.success
             session_id = result.session_id
-            
+
             try:
                 # List sessions and check that web URLs are None
                 sessions_response = await list_terminal_sessions(mock_context)
                 assert sessions_response.success
                 assert len(sessions_response.sessions) >= 1
-                
+
                 # Find our session
                 our_session = None
                 for session in sessions_response.sessions:
                     if session.session_id == session_id:
                         our_session = session
                         break
-                
+
                 assert our_session is not None
                 assert our_session.web_url is None
-                
+
             finally:
                 # Cleanup
                 destroy_request = DestroySessionRequest(session_id=session_id)
@@ -724,51 +750,63 @@ class TestWebInterfaceIntegration:
     @pytest.mark.asyncio
     async def test_web_url_with_external_host(self, mock_context):
         """Test web URL generation with external host configuration"""
-        from src.terminal_control_mcp.config import ServerConfig
         from unittest.mock import patch
-        
+
+        from src.terminal_control_mcp.config import ServerConfig
+
         # Mock web interface with external host
-        with patch.object(
-            ServerConfig, 'from_config_and_environment',
-            return_value=type('Config', (), {
-                'web_enabled': True,
-                'web_host': '0.0.0.0',
-                'web_port': 9000,
-                'external_web_host': 'server.example.com',
-                'web_auto_port': False
-            })()
-        ), patch('src.terminal_control_mcp.main.WEB_INTERFACE_AVAILABLE', True), \
-           patch('src.terminal_control_mcp.main.config') as mock_config:
-            
+        with (
+            patch.object(
+                ServerConfig,
+                "from_config_and_environment",
+                return_value=type(
+                    "Config",
+                    (),
+                    {
+                        "web_enabled": True,
+                        "web_host": "0.0.0.0",
+                        "web_port": 9000,
+                        "external_web_host": "server.example.com",
+                        "web_auto_port": False,
+                    },
+                )(),
+            ),
+            patch("src.terminal_control_mcp.main.WEB_INTERFACE_AVAILABLE", True),
+            patch("src.terminal_control_mcp.main.config") as mock_config,
+        ):
+
             mock_config.web_enabled = True
-            mock_config.web_host = '0.0.0.0'
+            mock_config.web_host = "0.0.0.0"
             mock_config.web_port = 9000
-            mock_config.external_web_host = 'server.example.com'
+            mock_config.external_web_host = "server.example.com"
             mock_config.web_auto_port = False
-            
+
             # Create a session
             request = OpenTerminalRequest(shell="bash")
             result = await open_terminal(request, mock_context)
             assert result.success
             session_id = result.session_id
-            
+
             try:
                 # List sessions and check for external host in web URLs
                 sessions_response = await list_terminal_sessions(mock_context)
                 assert sessions_response.success
                 assert len(sessions_response.sessions) >= 1
-                
+
                 # Find our session
                 our_session = None
                 for session in sessions_response.sessions:
                     if session.session_id == session_id:
                         our_session = session
                         break
-                
+
                 assert our_session is not None
                 assert our_session.web_url is not None
-                assert f"http://server.example.com:9000/session/{session_id}" in our_session.web_url
-                
+                assert (
+                    f"http://server.example.com:9000/session/{session_id}"
+                    in our_session.web_url
+                )
+
             finally:
                 # Cleanup
                 destroy_request = DestroySessionRequest(session_id=session_id)
@@ -777,41 +815,55 @@ class TestWebInterfaceIntegration:
     @pytest.mark.asyncio
     async def test_open_terminal_returns_web_url(self, mock_context):
         """Test that open_terminal returns web URL when web interface is enabled"""
-        from src.terminal_control_mcp.config import ServerConfig
         from unittest.mock import patch
-        
+
+        from src.terminal_control_mcp.config import ServerConfig
+
         # Mock web interface as enabled
-        with patch.object(
-            ServerConfig, 'from_config_and_environment',
-            return_value=type('Config', (), {
-                'web_enabled': True,
-                'web_host': 'localhost',
-                'web_port': 8080,
-                'external_web_host': None,
-                'web_auto_port': False
-            })()
-        ), patch('src.terminal_control_mcp.main.WEB_INTERFACE_AVAILABLE', True), \
-           patch('src.terminal_control_mcp.main.config') as mock_config:
-            
+        with (
+            patch.object(
+                ServerConfig,
+                "from_config_and_environment",
+                return_value=type(
+                    "Config",
+                    (),
+                    {
+                        "web_enabled": True,
+                        "web_host": "localhost",
+                        "web_port": 8080,
+                        "external_web_host": None,
+                        "web_auto_port": False,
+                    },
+                )(),
+            ),
+            patch("src.terminal_control_mcp.main.WEB_INTERFACE_AVAILABLE", True),
+            patch("src.terminal_control_mcp.main.config") as mock_config,
+        ):
+
             mock_config.web_enabled = True
-            mock_config.web_host = 'localhost'
+            mock_config.web_host = "localhost"
             mock_config.web_port = 8080
             mock_config.external_web_host = None
             mock_config.web_auto_port = False
-            
+
             # Create a session
             request = OpenTerminalRequest(shell="bash")
             result = await open_terminal(request, mock_context)
-            
+
             try:
                 assert result.success
                 assert result.web_url is not None
-                assert f"http://localhost:8080/session/{result.session_id}" in result.web_url
-                
+                assert (
+                    f"http://localhost:8080/session/{result.session_id}"
+                    in result.web_url
+                )
+
             finally:
                 # Cleanup
                 if result.success:
-                    destroy_request = DestroySessionRequest(session_id=result.session_id)
+                    destroy_request = DestroySessionRequest(
+                        session_id=result.session_id
+                    )
                     await exit_terminal(destroy_request, mock_context)
 
 

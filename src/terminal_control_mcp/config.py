@@ -5,8 +5,13 @@ All configuration options and environment variable handling
 """
 
 import os
-import tomllib
 from dataclasses import dataclass, field
+
+# TOML support with automatic fallback
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib  # type: ignore[no-redef]
 from enum import Enum
 from pathlib import Path
 from typing import Any, TypedDict
@@ -23,6 +28,7 @@ class SecurityLevel(Enum):
 
 class TerminalEmulator(TypedDict):
     """Terminal emulator configuration"""
+
     name: str
     command: list[str]
 
@@ -100,25 +106,35 @@ class ServerConfig:
             ),
             external_web_host=cls._get_str_value(
                 "TERMINAL_CONTROL_EXTERNAL_HOST",
-                config_data.get("web", {}).get("external_host", defaults.external_web_host),
+                config_data.get("web", {}).get(
+                    "external_host", defaults.external_web_host
+                ),
             ),
             # Security
             security_level=cls._get_security_level(
                 "TERMINAL_CONTROL_SECURITY_LEVEL",
-                config_data.get("security", {}).get("level", defaults.security_level.value),
+                config_data.get("security", {}).get(
+                    "level", defaults.security_level.value
+                ),
             ),
             max_calls_per_minute=cls._get_int_value(
                 "TERMINAL_CONTROL_MAX_CALLS_PER_MINUTE",
-                config_data.get("security", {}).get("max_calls_per_minute", defaults.max_calls_per_minute),
+                config_data.get("security", {}).get(
+                    "max_calls_per_minute", defaults.max_calls_per_minute
+                ),
             ),
             max_sessions=cls._get_int_value(
                 "TERMINAL_CONTROL_MAX_SESSIONS",
-                config_data.get("security", {}).get("max_sessions", defaults.max_sessions),
+                config_data.get("security", {}).get(
+                    "max_sessions", defaults.max_sessions
+                ),
             ),
             # Sessions
             default_shell=cls._get_str_value(
                 "TERMINAL_CONTROL_DEFAULT_SHELL",
-                config_data.get("session", {}).get("default_shell", defaults.default_shell),
+                config_data.get("session", {}).get(
+                    "default_shell", defaults.default_shell
+                ),
             )
             or defaults.default_shell,
             session_timeout=cls._get_int_value(
@@ -142,19 +158,27 @@ class ServerConfig:
             ),
             terminal_close_timeout=cls._get_float_value(
                 "TERMINAL_CONTROL_TERMINAL_CLOSE_TIMEOUT",
-                config_data.get("terminal", {}).get("close_timeout", defaults.terminal_close_timeout),
+                config_data.get("terminal", {}).get(
+                    "close_timeout", defaults.terminal_close_timeout
+                ),
             ),
             terminal_process_check_timeout=cls._get_float_value(
                 "TERMINAL_CONTROL_TERMINAL_PROCESS_CHECK_TIMEOUT",
-                config_data.get("terminal", {}).get("process_check_timeout", defaults.terminal_process_check_timeout),
+                config_data.get("terminal", {}).get(
+                    "process_check_timeout", defaults.terminal_process_check_timeout
+                ),
             ),
             terminal_polling_interval=cls._get_float_value(
                 "TERMINAL_CONTROL_TERMINAL_POLLING_INTERVAL",
-                config_data.get("terminal", {}).get("polling_interval", defaults.terminal_polling_interval),
+                config_data.get("terminal", {}).get(
+                    "polling_interval", defaults.terminal_polling_interval
+                ),
             ),
             terminal_send_input_delay=cls._get_float_value(
                 "TERMINAL_CONTROL_TERMINAL_SEND_INPUT_DELAY",
-                config_data.get("terminal", {}).get("send_input_delay", defaults.terminal_send_input_delay),
+                config_data.get("terminal", {}).get(
+                    "send_input_delay", defaults.terminal_send_input_delay
+                ),
             ),
             terminal_emulators=cls._get_terminal_emulators(
                 config_data.get("terminal", {}).get("emulators", [])
@@ -248,7 +272,9 @@ class ServerConfig:
             return SecurityLevel.HIGH
 
     @staticmethod
-    def _get_terminal_emulators(emulator_configs: list[dict[str, Any]]) -> list[TerminalEmulator]:
+    def _get_terminal_emulators(
+        emulator_configs: list[dict[str, Any]],
+    ) -> list[TerminalEmulator]:
         """Parse terminal emulator configurations from TOML"""
         if not emulator_configs:
             # Default terminal emulators if none configured
@@ -256,8 +282,14 @@ class ServerConfig:
                 {"name": "gnome-terminal", "command": ["gnome-terminal", "--"]},
                 {"name": "konsole", "command": ["konsole", "-e"]},
                 {"name": "xfce4-terminal", "command": ["xfce4-terminal", "-e"]},
-                {"name": "io.elementary.terminal", "command": ["io.elementary.terminal", "-e"]},
-                {"name": "x-terminal-emulator", "command": ["x-terminal-emulator", "-e"]},
+                {
+                    "name": "io.elementary.terminal",
+                    "command": ["io.elementary.terminal", "-e"],
+                },
+                {
+                    "name": "x-terminal-emulator",
+                    "command": ["x-terminal-emulator", "-e"],
+                },
                 {"name": "xterm", "command": ["xterm", "-e"]},
                 {"name": "Terminal", "command": ["open", "-a", "Terminal"]},
                 {"name": "alacritty", "command": ["alacritty", "-e"]},
@@ -270,7 +302,7 @@ class ServerConfig:
             if isinstance(config, dict) and "name" in config and "command" in config:
                 emulator: TerminalEmulator = {
                     "name": config["name"],
-                    "command": config["command"]
+                    "command": config["command"],
                 }
                 emulators.append(emulator)
 

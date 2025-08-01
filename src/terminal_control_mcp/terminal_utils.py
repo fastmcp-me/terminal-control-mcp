@@ -51,7 +51,12 @@ def _build_terminal_command(terminal_cmd: str, tmux_session_name: str) -> list[s
                 return ["kitty", "tmux", "attach-session", "-t", tmux_session_name]
             else:
                 # Most terminals use the pattern: terminal [args] tmux attach-session -t session
-                return base_command + ["tmux", "attach-session", "-t", tmux_session_name]
+                return base_command + [
+                    "tmux",
+                    "attach-session",
+                    "-t",
+                    tmux_session_name,
+                ]
 
     # Fallback if not found in configuration
     return [terminal_cmd, "-e", "tmux", "attach-session", "-t", tmux_session_name]
@@ -110,7 +115,9 @@ async def _check_process_result(
 ) -> bool:
     """Check if the terminal process started successfully"""
     try:
-        await asyncio.wait_for(process.wait(), timeout=config.terminal_process_check_timeout)
+        await asyncio.wait_for(
+            process.wait(), timeout=config.terminal_process_check_timeout
+        )
         if process.returncode == 0:
             logger.info(f"Terminal window opened successfully for session {session_id}")
             return True

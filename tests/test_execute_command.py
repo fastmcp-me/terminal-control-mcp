@@ -225,7 +225,9 @@ class TestInteractiveWorkflows:
 
             if screen_result.process_running:
                 # Send input
-                input_request = SendInputRequest(session_id=session_id, input_text="y\n")
+                input_request = SendInputRequest(
+                    session_id=session_id, input_text="y\n"
+                )
                 input_result = await send_input(input_request, mock_context)
                 assert input_result.success
 

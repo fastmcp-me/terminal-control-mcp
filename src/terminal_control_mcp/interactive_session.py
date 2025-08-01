@@ -45,7 +45,6 @@ class InteractiveSession:
 
         # Terminal output stream file for web interface
         # Use appropriate temp directory for different platforms
-        import tempfile
         temp_dir = Path(tempfile.gettempdir())
         self.output_stream_file = temp_dir / f"tmux_stream_{session_id}.log"
 
@@ -134,7 +133,13 @@ class InteractiveSession:
         tmux_session = self.tmux_session
         await loop.run_in_executor(
             None,
-            lambda: tmux_session.cmd("resize-window", "-x", str(config.terminal_width), "-y", str(config.terminal_height)),
+            lambda: tmux_session.cmd(
+                "resize-window",
+                "-x",
+                str(config.terminal_width),
+                "-y",
+                str(config.terminal_height),
+            ),
         )
 
     async def _setup_terminal_output_capture(self) -> None:
@@ -148,23 +153,29 @@ class InteractiveSession:
         loop = asyncio.get_event_loop()
         tmux_pane = self.tmux_pane
         output_file = str(self.output_stream_file)
-        
+
         try:
             # Try standard pipe-pane first
             await loop.run_in_executor(
                 None,
                 lambda: tmux_pane.cmd("pipe-pane", "-o", f"cat > {output_file}"),
             )
-            
+
             # Test if pipe-pane is working by checking file creation and initial size
             await asyncio.sleep(0.2)
             if self.output_stream_file.exists():
-                logger.debug(f"Pipe-pane working correctly for session {self.session_id}")
+                logger.debug(
+                    f"Pipe-pane working correctly for session {self.session_id}"
+                )
             else:
-                logger.warning(f"Pipe-pane stream file not created for session {self.session_id}")
-                
+                logger.warning(
+                    f"Pipe-pane stream file not created for session {self.session_id}"
+                )
+
         except Exception as e:
-            logger.warning(f"Failed to setup pipe-pane for session {self.session_id}: {e}")
+            logger.warning(
+                f"Failed to setup pipe-pane for session {self.session_id}: {e}"
+            )
             logger.info("Web interface will fall back to direct tmux capture")
 
     async def _configure_session_environment(self, env: dict[str, str]) -> None:
@@ -244,12 +255,10 @@ class InteractiveSession:
         try:
             loop = asyncio.get_event_loop()
             tmux_pane = self.tmux_pane
-            
+
             # Use libtmux's capture_pane() method instead of cmd()
             # This returns a list of strings representing the pane content
-            content = await loop.run_in_executor(
-                None, lambda: tmux_pane.capture_pane()
-            )
+            content = await loop.run_in_executor(None, lambda: tmux_pane.capture_pane())
 
             if isinstance(content, list):
                 raw_output = "\n".join(str(line) for line in content)

@@ -37,11 +37,11 @@ from src.terminal_control_mcp.session_manager import SessionManager, SessionStat
 
 class MockContext:
     """Mock context that matches the structure expected by MCP tools"""
+
     def __init__(self, session_manager, security_manager):
         self.request_context = SimpleNamespace(
             lifespan_context=SimpleNamespace(
-                session_manager=session_manager,
-                security_manager=security_manager
+                session_manager=session_manager, security_manager=security_manager
             )
         )
 
@@ -194,8 +194,12 @@ class TestBidirectionalSessionDestruction:
         # Mock the _close_terminal_window_if_needed method directly to avoid all subprocess calls
         async def mock_close_if_needed(session_id, close_terminal_window):
             pass  # Do nothing - no subprocess calls
-            
-        with patch.object(session_manager, '_close_terminal_window_if_needed', side_effect=mock_close_if_needed):
+
+        with patch.object(
+            session_manager,
+            "_close_terminal_window_if_needed",
+            side_effect=mock_close_if_needed,
+        ):
             # Mock a session
             mock_session = AsyncMock()
             mock_session.terminate = AsyncMock()
@@ -212,7 +216,9 @@ class TestBidirectionalSessionDestruction:
             assert session_id not in session_manager.sessions
 
     @pytest.mark.asyncio
-    async def test_exit_terminal_tool_triggers_session_destruction(self, session_manager, mock_context):
+    async def test_exit_terminal_tool_triggers_session_destruction(
+        self, session_manager, mock_context
+    ):
         """Test that exit_terminal MCP tool properly destroys sessions"""
 
         # Mock a session
@@ -251,7 +257,7 @@ class TestBidirectionalSessionDestruction:
         # Mock subprocess to simulate failure
         with patch("asyncio.create_subprocess_exec") as mock_subprocess:
             mock_process = AsyncMock()
-            mock_process.returncode = 1  
+            mock_process.returncode = 1
             mock_process.wait = AsyncMock()
             mock_stderr = AsyncMock()
             mock_stderr.read = AsyncMock(return_value=b"Session not found")
@@ -302,12 +308,13 @@ class TestBidirectionalSessionDestruction:
         # Create a mock session that throws error on health check (use standard Mock)
         mock_session = MagicMock()
         mock_session.is_process_alive.side_effect = Exception("Health check error")
-        
+
         # Create proper async mock for terminate method
         async def mock_terminate():
             pass
+
         mock_session.terminate = mock_terminate
-        
+
         session_id = "test_session_error"
 
         # Add session to manager manually
@@ -319,8 +326,12 @@ class TestBidirectionalSessionDestruction:
         # Mock the _close_terminal_window_if_needed method to avoid subprocess calls
         async def mock_close_if_needed(session_id, close_terminal_window):
             pass  # Do nothing
-            
-        with patch.object(session_manager, '_close_terminal_window_if_needed', side_effect=mock_close_if_needed):
+
+        with patch.object(
+            session_manager,
+            "_close_terminal_window_if_needed",
+            side_effect=mock_close_if_needed,
+        ):
             # Run cleanup task manually - should handle error gracefully
             dead_sessions = session_manager._find_dead_sessions()
             for session_id in dead_sessions:
@@ -337,18 +348,23 @@ class TestBidirectionalSessionDestruction:
         # Mock the _close_terminal_window_if_needed method to avoid subprocess calls
         async def mock_close_if_needed(session_id, close_terminal_window):
             pass
-            
-        with patch.object(session_manager, '_close_terminal_window_if_needed', side_effect=mock_close_if_needed):
+
+        with patch.object(
+            session_manager,
+            "_close_terminal_window_if_needed",
+            side_effect=mock_close_if_needed,
+        ):
             # Create multiple dead sessions
             dead_sessions = []
             for i in range(3):
                 session_id = f"dead_session_{i}"
                 mock_session = MagicMock()
                 mock_session.is_process_alive.return_value = False
-                
+
                 # Create proper async function for terminate
                 async def mock_terminate():
                     pass
+
                 mock_session.terminate = mock_terminate
 
                 session_manager.sessions[session_id] = mock_session
@@ -426,7 +442,9 @@ class TestSessionLifecycleIntegration:
     async def test_complete_session_lifecycle_with_exit_command(self, mock_context):
         """Test complete session lifecycle: create, interact, exit via command, auto-cleanup"""
         # Create session
-        create_request = OpenTerminalRequest(shell="bash", working_directory=None, environment=None)
+        create_request = OpenTerminalRequest(
+            shell="bash", working_directory=None, environment=None
+        )
         create_response = await open_terminal(create_request, mock_context)
         assert create_response.success is True
         session_id = create_response.session_id
@@ -458,7 +476,9 @@ class TestSessionLifecycleIntegration:
     ):
         """Test complete session lifecycle: create, interact, destroy via MCP tool"""
         # Create session
-        create_request = OpenTerminalRequest(shell="bash", working_directory=None, environment=None)
+        create_request = OpenTerminalRequest(
+            shell="bash", working_directory=None, environment=None
+        )
         create_response = await open_terminal(create_request, mock_context)
         assert create_response.success is True
         session_id = create_response.session_id
@@ -471,7 +491,9 @@ class TestSessionLifecycleIntegration:
         assert input_response.success is True
 
         # Get screen content
-        screen_request = GetScreenContentRequest(session_id=session_id, content_mode="screen", line_count=None)
+        screen_request = GetScreenContentRequest(
+            session_id=session_id, content_mode="screen", line_count=None
+        )
         screen_response = await get_screen_content(screen_request, mock_context)
         assert screen_response.success is True
         assert screen_response.process_running is True
@@ -496,7 +518,9 @@ class TestSessionLifecycleIntegration:
         assert "not found" in destroy_response.message.lower()
 
         # Try to get content from non-existent session
-        screen_request = GetScreenContentRequest(session_id="non_existent_session", content_mode="screen", line_count=None)
+        screen_request = GetScreenContentRequest(
+            session_id="non_existent_session", content_mode="screen", line_count=None
+        )
         screen_response = await get_screen_content(screen_request, mock_context)
         assert screen_response.success is False
         assert "not found" in screen_response.error.lower()

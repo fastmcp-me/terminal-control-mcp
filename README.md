@@ -44,7 +44,7 @@ brew install tmux
 sudo yum install tmux  # or sudo dnf install tmux
 ```
 
-**Python Requirements**: Python 3.11 or later
+**Python Requirements**: Python 3.9 or later
 
 ### Installation
 

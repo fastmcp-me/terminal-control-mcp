@@ -223,7 +223,11 @@ async def list_terminal_sessions(ctx: Context) -> ListSessionsResponse:
             state=session.state.value,
             created_at=session.created_at,
             last_activity=session.last_activity,
-            web_url=f"http://{web_host}:{web_port}/session/{session.session_id}" if web_host and web_port else None,
+            web_url=(
+                f"http://{web_host}:{web_port}/session/{session.session_id}"
+                if web_host and web_port
+                else None
+            ),
         )
         for session in sessions
     ]
@@ -393,7 +397,7 @@ async def send_input(request: SendInputRequest, ctx: Context) -> SendInputRespon
         await asyncio.sleep(config.terminal_send_input_delay)
 
         # For exit commands, give extra time for tmux to detect shell exit
-        if request.input_text.strip().lower() in ['exit', 'exit\n']:
+        if request.input_text.strip().lower() in ["exit", "exit\n"]:
             await asyncio.sleep(0.5)  # Extra delay for exit detection
 
         # Capture current screen content after input (use screen mode)
@@ -542,12 +546,16 @@ def main() -> None:
         print("\n1. For Claude Code (Anthropic):")
         print("   claude mcp add terminal-control -s user terminal-control-mcp")
         print("\n2. For other MCP clients, add to your configuration:")
-        print('   {"mcpServers": {"terminal-control": {"command": "terminal-control-mcp"}}}')
+        print(
+            '   {"mcpServers": {"terminal-control": {"command": "terminal-control-mcp"}}}'
+        )
         print("\n3. The server will be automatically launched by your MCP client.")
-        print("\n💡 For more information, see: https://github.com/wehnsdaefflae/terminal-control-mcp")
+        print(
+            "\n💡 For more information, see: https://github.com/wehnsdaefflae/terminal-control-mcp"
+        )
         print()
         sys.exit(0)
-    
+
     mcp.run()
 
 
