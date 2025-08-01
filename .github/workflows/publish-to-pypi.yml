@@ -1,0 +1,38 @@
+# This workflow builds and publishes a Python package to PyPI when a release is created.
+
+name: Publish Python Package to PyPI
+
+on:
+  release:
+    types: [published] # Run only when a new release is published
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      # Checks out a copy of your repository on the runner.
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+      # Sets up a Python environment.
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install build
+      # Installs the 'build' package, which is used to create the distribution files.
+
+    - name: Build package
+      run: python -m build
+      # Builds the source distribution (sdist) and wheel.
+
+    - name: Publish package to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        password: ${{ secrets.PYPI_API_TOKEN }}
+      # This is the action that handles the upload to PyPI.
+      # It uses the API token stored in your repository's secrets.
