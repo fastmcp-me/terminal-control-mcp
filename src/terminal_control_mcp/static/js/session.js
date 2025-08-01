@@ -3,13 +3,27 @@
 // Get session ID from global variable (set by template)
 // const sessionId is expected to be defined by the template
 
-// Initialize xterm.js terminal with fixed dimensions matching tmux
+// Initialize xterm.js terminal with responsive dimensions
+function getTerminalDimensions() {
+    const isMobile = window.innerWidth <= 768;
+    const isSmallMobile = window.innerWidth <= 600;
+    
+    if (isSmallMobile) {
+        return { cols: 80, rows: 25, fontSize: 12 };
+    } else if (isMobile) {
+        return { cols: 100, rows: 28, fontSize: 13 };
+    } else {
+        return { cols: 120, rows: 30, fontSize: 14 };
+    }
+}
+
+const terminalDims = getTerminalDimensions();
 const terminal = new Terminal({
     cursorBlink: true,
-    fontSize: 14,
+    fontSize: terminalDims.fontSize,
     fontFamily: 'Monaco, Consolas, "Courier New", monospace',
-    cols: 120,
-    rows: 30,
+    cols: terminalDims.cols,
+    rows: terminalDims.rows,
     theme: {
         background: '#000000',
         foreground: '#ffffff'

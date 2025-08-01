@@ -24,10 +24,10 @@
                 <tbody>
                     {% for session in sessions %}
                     <tr>
-                        <td><code>{{ session.session_id }}</code></td>
-                        <td><code>{{ session.command }}</code></td>
-                        <td><span class="status status-{{ session.state.lower() }}">{{ session.state }}</span></td>
-                        <td><a href="{{ session.url }}" class="btn btn-primary">View Session</a></td>
+                        <td data-label="Session ID"><code>{{ session.session_id }}</code></td>
+                        <td data-label="Command"><code>{{ session.command }}</code></td>
+                        <td data-label="Status"><span class="status status-{{ session.state.lower() }}">{{ session.state }}</span></td>
+                        <td data-label="Actions"><a href="{{ session.url }}" class="btn btn-primary">View Session</a></td>
                     </tr>
                     {% endfor %}
                 </tbody>
