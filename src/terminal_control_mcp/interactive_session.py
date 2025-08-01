@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import re
+import tempfile
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -43,7 +44,10 @@ class InteractiveSession:
         self.tmux_session_name = f"mcp_{session_id}"
 
         # Terminal output stream file for web interface
-        self.output_stream_file = Path(f"/tmp/tmux_stream_{session_id}.log")
+        # Use appropriate temp directory for different platforms
+        import tempfile
+        temp_dir = Path(tempfile.gettempdir())
+        self.output_stream_file = temp_dir / f"tmux_stream_{session_id}.log"
 
         self.is_active = False
         self.exit_code: int | None = None
@@ -134,7 +138,7 @@ class InteractiveSession:
         )
 
     async def _setup_terminal_output_capture(self) -> None:
-        """Set up pipe-pane for terminal output capture"""
+        """Set up pipe-pane for terminal output capture with Android/Termux compatibility"""
         if self.output_stream_file.exists():
             self.output_stream_file.unlink()
 
@@ -144,10 +148,36 @@ class InteractiveSession:
         loop = asyncio.get_event_loop()
         tmux_pane = self.tmux_pane
         output_file = str(self.output_stream_file)
-        await loop.run_in_executor(
-            None,
-            lambda: tmux_pane.cmd("pipe-pane", "-o", f"cat > {output_file}"),
-        )
+        
+        try:
+            # Try standard pipe-pane first
+            await loop.run_in_executor(
+                None,
+                lambda: tmux_pane.cmd("pipe-pane", "-o", f"cat > {output_file}"),
+            )
+            
+            # Test if pipe-pane is working by sending a test input and checking output
+            await asyncio.sleep(0.1)
+            test_marker = f"__TEST_PIPE_{self.session_id}__"
+            await loop.run_in_executor(
+                None, lambda: tmux_pane.send_keys(f"echo {test_marker}", enter=True)
+            )
+            
+            # Wait briefly and check if the test marker appears in the file
+            await asyncio.sleep(0.2)
+            if self.output_stream_file.exists() and self.output_stream_file.stat().st_size > 0:
+                with open(self.output_stream_file, 'r') as f:
+                    content = f.read()
+                    if test_marker in content:
+                        logger.debug(f"Pipe-pane working correctly for session {self.session_id}")
+                    else:
+                        logger.warning(f"Pipe-pane not capturing output for session {self.session_id}")
+            else:
+                logger.warning(f"Pipe-pane stream file not created for session {self.session_id}")
+                
+        except Exception as e:
+            logger.warning(f"Failed to setup pipe-pane for session {self.session_id}: {e}")
+            logger.info("Web interface will fall back to direct tmux capture")
 
     async def _configure_session_environment(self, env: dict[str, str]) -> None:
         """Configure environment variables in the tmux session"""

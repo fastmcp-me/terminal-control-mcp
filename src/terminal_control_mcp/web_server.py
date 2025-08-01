@@ -292,6 +292,7 @@ class WebServer:
     ) -> None:
         """Poll tmux session for new stream output and send incremental data to websocket"""
         websocket_stream_position = 0
+        use_direct_capture = False
 
         try:
             # Send historical content first
@@ -299,10 +300,21 @@ class WebServer:
                 session, websocket, session_id
             )
 
-            # Then poll for incremental updates
-            await self._poll_incremental_updates(
-                session_id, session, websocket, websocket_stream_position
-            )
+            # Check if pipe-pane is working by monitoring the stream file
+            await asyncio.sleep(0.5)  # Give pipe-pane time to start
+            if not session.output_stream_file.exists() or session.output_stream_file.stat().st_size == 0:
+                logger.info(f"Stream file not working for session {session_id}, using direct tmux capture")
+                use_direct_capture = True
+
+            if use_direct_capture:
+                await self._poll_direct_tmux_capture(
+                    session_id, session, websocket
+                )
+            else:
+                # Use standard pipe-pane streaming
+                await self._poll_incremental_updates(
+                    session_id, session, websocket, websocket_stream_position
+                )
         except asyncio.CancelledError:
             pass
 
@@ -383,6 +395,46 @@ class WebServer:
                 ] = asyncio.get_event_loop().time()
 
         return new_stream_position
+
+    async def _poll_direct_tmux_capture(
+        self, session_id: str, session: InteractiveSession, websocket: WebSocket
+    ) -> None:
+        """Fallback polling using direct tmux capture for Android/Termux compatibility"""
+        last_content = ""
+        
+        while True:
+            await asyncio.sleep(config.terminal_polling_interval)
+            
+            try:
+                # Get current content directly from tmux
+                current_content = await session.get_raw_terminal_output()
+                
+                # Send only new content to avoid duplicates
+                if current_content != last_content:
+                    # Find the new content by checking what's been added
+                    if last_content and current_content.startswith(last_content):
+                        # Only new content was added at the end
+                        new_content = current_content[len(last_content):]
+                        if new_content:
+                            await websocket.send_text(new_content)
+                    else:
+                        # Content changed significantly, send all (handles screen clears, etc.)
+                        await websocket.send_text(current_content)
+                    
+                    last_content = current_content
+                    
+                    # Update buffer for MCP tools
+                    self.terminal_buffers[session_id] = current_content
+                    
+                    # Update timestamp for MCP tools
+                    if session_id in self.xterm_terminals:
+                        self.xterm_terminals[session_id][
+                            "last_update"
+                        ] = asyncio.get_event_loop().time()
+                
+                await self._check_session_termination(session_id, session)
+            except Exception as e:
+                logger.debug(f"Error in direct tmux capture polling: {e}")
 
     async def _handle_mcp_input(
         self, session_id: str, session: InteractiveSession
