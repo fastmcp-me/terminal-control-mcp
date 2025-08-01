@@ -59,7 +59,7 @@ pip install terminal-control-mcp
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/terminal-control-mcp.git
+git clone https://github.com/wehnsdaefflae/terminal-control-mcp.git
 cd terminal-control-mcp
 
 # Create virtual environment (choose one)
