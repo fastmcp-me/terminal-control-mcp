@@ -153,3 +153,29 @@ class OpenTerminalResponse(BaseModel):
         None, description="ISO timestamp when screen content was captured"
     )
     error: str | None = None
+
+
+class AwaitOutputRequest(BaseModel):
+    """Request to wait for specific output pattern in terminal session"""
+
+    session_id: str = Field(description="ID of the session to monitor")
+    pattern: str = Field(
+        description="Regular expression pattern to match in terminal output"
+    )
+    timeout: float = Field(
+        10.0, description="Maximum time to wait in seconds (default: 10.0)"
+    )
+
+
+class AwaitOutputResponse(BaseModel):
+    """Response from waiting for terminal output pattern"""
+
+    success: bool
+    session_id: str
+    match_text: str | None = Field(
+        None, description="The matched text if pattern was found, None if timeout"
+    )
+    screen_content: str
+    elapsed_time: float
+    timestamp: str
+    error: str | None = None

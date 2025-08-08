@@ -7,6 +7,7 @@ Core tools:
 - `open_terminal`: Open new terminal sessions with specified shell
 - `get_screen_content`: Get current terminal output from sessions
 - `send_input`: Send input to interactive sessions (supports key combinations)
+- `await_output`: Wait for specific regex patterns to appear in terminal output
 - `list_terminal_sessions`: Show active sessions
 - `exit_terminal`: Clean up sessions
 """
@@ -26,6 +27,8 @@ from mcp.server.fastmcp import Context, FastMCP
 
 from .config import ServerConfig
 from .models import (
+    AwaitOutputRequest,
+    AwaitOutputResponse,
     DestroySessionRequest,
     DestroySessionResponse,
     GetScreenContentRequest,
@@ -203,7 +206,7 @@ async def list_terminal_sessions(ctx: Context) -> ListSessionsResponse:
     - sessions: List[SessionInfo] - List of active sessions with session_id, command, state, timestamps, and web URLs (if web interface enabled)
     - total_sessions: int - Total number of active sessions (max 50)
 
-    Use with: `get_screen_content`, `send_input`, `exit_terminal`
+    Use with: `get_screen_content`, `send_input`, `exit_terminal`, `open_terminal`, and `await_output`
     """
     app_ctx = ctx.request_context.lifespan_context
 
@@ -260,7 +263,7 @@ async def exit_terminal(
     - session_id: str - Echo of the requested session ID
     - message: str - "Session destroyed" or "Session not found"
 
-    Use with: `open_terminal`, `get_screen_content`, `send_input`, `list_terminal_sessions`
+    Use with: `open_terminal`, `get_screen_content`, `send_input`, `list_terminal_sessions`, and `await_output`
     """
     app_ctx = ctx.request_context.lifespan_context
 
@@ -296,7 +299,7 @@ async def get_screen_content(
     - timestamp: str - ISO timestamp when content was captured
     - error: str | None - Error message if operation failed
 
-    Use with: `open_terminal`, `send_input`, `list_terminal_sessions`, `exit_terminal`
+    Use with: `open_terminal`, `send_input`, `list_terminal_sessions`, `exit_terminal`, and `await_output`
     """
     app_ctx = ctx.request_context.lifespan_context
 
@@ -366,7 +369,7 @@ async def send_input(request: SendInputRequest, ctx: Context) -> SendInputRespon
     - process_running: bool | None - Whether process is still active
     - error: str | None - Error message if operation failed
 
-    Use with: `open_terminal`, `get_screen_content`, `list_terminal_sessions`, `exit_terminal`
+    Use with: `open_terminal`, `get_screen_content`, `list_terminal_sessions`, `exit_terminal`, and `await_output`
     """
     app_ctx = ctx.request_context.lifespan_context
 
@@ -488,7 +491,7 @@ async def open_terminal(
     - timestamp: str | None - ISO timestamp when content was captured
     - error: str | None - Error message if operation failed
 
-    Use with: `send_input`, `get_screen_content`, `list_terminal_sessions`, `exit_terminal`
+    Use with: `send_input`, `get_screen_content`, `list_terminal_sessions`, `exit_terminal`, and `await_output`
     """
     app_ctx = ctx.request_context.lifespan_context
 
@@ -529,6 +532,75 @@ async def open_terminal(
             session_id="",
             shell=request.shell,
             web_url=None,
+            timestamp=datetime.now().isoformat(),
+            error=str(e),
+        )
+
+
+@mcp.tool()
+async def await_output(
+    request: AwaitOutputRequest, ctx: Context
+) -> AwaitOutputResponse:
+    """Wait for specific output pattern to appear in terminal session
+
+    Parameters (AwaitOutputRequest):
+    - session_id: str - ID of the session to monitor
+    - pattern: str - Regular expression pattern to match in terminal output
+    - timeout: float - Maximum time to wait in seconds (default: 10.0)
+
+    Returns AwaitOutputResponse with:
+    - success: bool - True if operation completed without errors
+    - session_id: str - Echo of the requested session ID
+    - match_text: str | None - The matched text if pattern was found, None if timeout
+    - screen_content: str - Current screen content when match occurred or timeout reached
+    - elapsed_time: float - Time elapsed before match or timeout
+    - timestamp: str - ISO timestamp when operation completed
+    - error: str | None - Error message if operation failed
+
+    Use with: `open_terminal`, `send_input`, `get_screen_content`, `exit_terminal`, and `list_terminal_sessions`
+    """
+    app_ctx = ctx.request_context.lifespan_context
+
+    session = await app_ctx.session_manager.get_session(request.session_id)
+    if not session:
+        return AwaitOutputResponse(
+            success=False,
+            session_id=request.session_id,
+            match_text=None,
+            screen_content="",
+            elapsed_time=0.0,
+            timestamp=datetime.now().isoformat(),
+            error="Session not found",
+        )
+
+    try:
+        # Wait for pattern to appear
+        match_text, elapsed_time = await session.await_output_pattern(
+            request.pattern, request.timeout
+        )
+
+        # Get final screen content
+        screen_content = await session.get_current_screen_content()
+
+        return AwaitOutputResponse(
+            success=True,
+            session_id=request.session_id,
+            match_text=match_text,
+            screen_content=screen_content,
+            elapsed_time=elapsed_time,
+            timestamp=datetime.now().isoformat(),
+        )
+
+    except Exception as e:
+        logger.warning(
+            f"Failed to await output pattern in session {request.session_id}: {e}"
+        )
+        return AwaitOutputResponse(
+            success=False,
+            session_id=request.session_id,
+            match_text=None,
+            screen_content="",
+            elapsed_time=0.0,
             timestamp=datetime.now().isoformat(),
             error=str(e),
         )

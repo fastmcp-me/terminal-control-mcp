@@ -441,3 +441,48 @@ class InteractiveSession:
     def get_log_files(self) -> dict[str, str]:
         """Get paths to all log files for this session"""
         return self.interaction_logger.get_log_files()
+
+    async def await_output_pattern(
+        self, pattern: str, timeout: float = 10.0
+    ) -> tuple[str | None, float]:
+        """Wait for a specific regex pattern to appear in terminal output
+
+        Args:
+            pattern: Regular expression pattern to match
+            timeout: Maximum time to wait in seconds
+
+        Returns:
+            tuple: (matched_text, elapsed_time) - matched_text is None if timeout occurs
+        """
+        if not self.is_active:
+            return None, 0.0
+
+        start_time = time.time()
+        compiled_pattern = re.compile(pattern)
+
+        # Poll interval in seconds - balance between responsiveness and CPU usage
+        poll_interval = 0.1
+
+        while time.time() - start_time < timeout:
+            try:
+                # Get current screen content
+                current_content = await self.get_current_screen_content()
+
+                # Search for pattern
+                match = compiled_pattern.search(current_content)
+                if match:
+                    elapsed_time = time.time() - start_time
+                    return match.group(0), elapsed_time
+
+                # Wait before next check
+                await asyncio.sleep(poll_interval)
+
+            except Exception as e:
+                logger.debug(
+                    f"Error checking for pattern in session {self.session_id}: {e}"
+                )
+                await asyncio.sleep(poll_interval)
+
+        # Timeout occurred
+        elapsed_time = time.time() - start_time
+        return None, elapsed_time

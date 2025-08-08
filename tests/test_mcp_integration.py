@@ -16,6 +16,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from src.terminal_control_mcp.main import (
+    await_output,
     exit_terminal,
     get_screen_content,
     list_terminal_sessions,
@@ -23,6 +24,7 @@ from src.terminal_control_mcp.main import (
     send_input,
 )
 from src.terminal_control_mcp.models import (
+    AwaitOutputRequest,
     DestroySessionRequest,
     GetScreenContentRequest,
     OpenTerminalRequest,
@@ -616,6 +618,379 @@ class TestContentModeIntegration:
             assert new_response.success is True
             assert old_response.screen_content is not None
             assert new_response.screen_content is not None
+
+        finally:
+            # Clean up session
+            destroy_request = DestroySessionRequest(session_id=session_id)
+            await exit_terminal(destroy_request, mock_context)
+
+
+class TestAwaitOutputIntegration:
+    """Integration tests for the new await_output tool"""
+
+    @pytest.mark.asyncio
+    async def test_await_output_pattern_match(self, mock_context):
+        """Test await_output tool with pattern that matches"""
+        # Create a terminal session
+        create_request = OpenTerminalRequest(shell="bash")
+        create_response = await open_terminal(create_request, mock_context)
+        assert create_response.success is True
+        session_id = create_response.session_id
+
+        try:
+            # Send a command that produces predictable output
+            input_request = SendInputRequest(
+                session_id=session_id, input_text="echo 'MATCH_TEST_123'\n"
+            )
+            input_response = await send_input(input_request, mock_context)
+            assert input_response.success is True
+
+            # Wait for the pattern to appear
+            await_request = AwaitOutputRequest(
+                session_id=session_id, pattern=r"MATCH_TEST_123", timeout=5.0
+            )
+            await_response = await await_output(await_request, mock_context)
+
+            assert await_response.success is True
+            assert await_response.session_id == session_id
+            assert await_response.match_text == "MATCH_TEST_123"
+            assert await_response.screen_content is not None
+            assert await_response.elapsed_time >= 0.0
+            assert await_response.elapsed_time < 5.0
+            assert await_response.timestamp is not None
+            assert await_response.error is None
+
+        finally:
+            # Clean up session
+            destroy_request = DestroySessionRequest(session_id=session_id)
+            await exit_terminal(destroy_request, mock_context)
+
+    @pytest.mark.asyncio
+    async def test_await_output_timeout(self, mock_context):
+        """Test await_output tool with pattern that times out"""
+        # Create a terminal session
+        create_request = OpenTerminalRequest(shell="bash")
+        create_response = await open_terminal(create_request, mock_context)
+        assert create_response.success is True
+        session_id = create_response.session_id
+
+        try:
+            # Wait for a pattern that will never appear
+            await_request = AwaitOutputRequest(
+                session_id=session_id,
+                pattern=r"NEVER_APPEARS_PATTERN_xyz",
+                timeout=1.0,  # Short timeout for faster test
+            )
+            await_response = await await_output(await_request, mock_context)
+
+            assert await_response.success is True
+            assert await_response.session_id == session_id
+            assert await_response.match_text is None  # No match due to timeout
+            assert await_response.screen_content is not None
+            assert await_response.elapsed_time >= 1.0  # Should be close to timeout
+            assert await_response.elapsed_time < 1.5  # But not too much over
+            assert await_response.timestamp is not None
+            assert await_response.error is None
+
+        finally:
+            # Clean up session
+            destroy_request = DestroySessionRequest(session_id=session_id)
+            await exit_terminal(destroy_request, mock_context)
+
+    @pytest.mark.asyncio
+    async def test_await_output_regex_patterns(self, mock_context):
+        """Test await_output tool with various regex patterns"""
+        # Create a terminal session
+        create_request = OpenTerminalRequest(shell="bash")
+        create_response = await open_terminal(create_request, mock_context)
+        assert create_response.success is True
+        session_id = create_response.session_id
+
+        try:
+            # Test different regex patterns
+            test_cases = [
+                ("echo 'test123'\n", r"\d+", "123"),
+                ("echo 'SUCCESS'\n", r"SUCCESS|FAIL", "SUCCESS"),
+                ("echo '$USER@hostname:~$'\n", r"\$\s*$", "$"),
+            ]
+
+            for command, pattern, expected_match in test_cases:
+                # Send command
+                input_request = SendInputRequest(
+                    session_id=session_id, input_text=command
+                )
+                await send_input(input_request, mock_context)
+
+                # Wait for pattern
+                await_request = AwaitOutputRequest(
+                    session_id=session_id, pattern=pattern, timeout=3.0
+                )
+                await_response = await await_output(await_request, mock_context)
+
+                assert await_response.success is True, f"Failed for pattern: {pattern}"
+                assert (
+                    await_response.match_text is not None
+                ), f"No match for pattern: {pattern}"
+                assert (
+                    expected_match in await_response.match_text
+                    or await_response.match_text == expected_match
+                )
+
+        finally:
+            # Clean up session
+            destroy_request = DestroySessionRequest(session_id=session_id)
+            await exit_terminal(destroy_request, mock_context)
+
+    @pytest.mark.asyncio
+    async def test_await_output_case_sensitivity(self, mock_context):
+        """Test await_output tool case sensitivity with regex flags"""
+        # Create a terminal session
+        create_request = OpenTerminalRequest(shell="bash")
+        create_response = await open_terminal(create_request, mock_context)
+        assert create_response.success is True
+        session_id = create_response.session_id
+
+        try:
+            # Send command with mixed case
+            input_request = SendInputRequest(
+                session_id=session_id, input_text="echo 'CaseSensitive'\n"
+            )
+            await send_input(input_request, mock_context)
+
+            # Test case-sensitive pattern (should match)
+            await_request = AwaitOutputRequest(
+                session_id=session_id, pattern=r"CaseSensitive", timeout=3.0
+            )
+            await_response = await await_output(await_request, mock_context)
+            assert await_response.success is True
+            assert await_response.match_text == "CaseSensitive"
+
+            # Test case-insensitive pattern using regex flags
+            input_request = SendInputRequest(
+                session_id=session_id, input_text="echo 'AnotherTest'\n"
+            )
+            await send_input(input_request, mock_context)
+
+            await_request = AwaitOutputRequest(
+                session_id=session_id,
+                pattern=r"(?i)anothertest",  # Case-insensitive flag
+                timeout=3.0,
+            )
+            await_response = await await_output(await_request, mock_context)
+            assert await_response.success is True
+            assert await_response.match_text == "AnotherTest"
+
+        finally:
+            # Clean up session
+            destroy_request = DestroySessionRequest(session_id=session_id)
+            await exit_terminal(destroy_request, mock_context)
+
+    @pytest.mark.asyncio
+    async def test_await_output_invalid_session(self, mock_context):
+        """Test await_output tool with invalid session ID"""
+        await_request = AwaitOutputRequest(
+            session_id="invalid_session_id", pattern=r"test", timeout=1.0
+        )
+        await_response = await await_output(await_request, mock_context)
+
+        assert await_response.success is False
+        assert await_response.session_id == "invalid_session_id"
+        assert await_response.match_text is None
+        assert await_response.screen_content == ""
+        assert await_response.elapsed_time == 0.0
+        assert await_response.error == "Session not found"
+
+    @pytest.mark.asyncio
+    async def test_await_output_invalid_regex(self, mock_context):
+        """Test await_output tool with invalid regex pattern"""
+        # Create a terminal session
+        create_request = OpenTerminalRequest(shell="bash")
+        create_response = await open_terminal(create_request, mock_context)
+        assert create_response.success is True
+        session_id = create_response.session_id
+
+        try:
+            # Test with invalid regex pattern
+            await_request = AwaitOutputRequest(
+                session_id=session_id,
+                pattern=r"[unclosed_bracket",  # Invalid regex
+                timeout=1.0,
+            )
+            await_response = await await_output(await_request, mock_context)
+
+            assert await_response.success is False
+            assert await_response.session_id == session_id
+            assert await_response.match_text is None
+            assert await_response.screen_content == ""
+            assert await_response.elapsed_time == 0.0
+            assert await_response.error is not None
+            assert (
+                "unterminated character set" in await_response.error.lower()
+                or "error" in await_response.error.lower()
+            )
+
+        finally:
+            # Clean up session
+            destroy_request = DestroySessionRequest(session_id=session_id)
+            await exit_terminal(destroy_request, mock_context)
+
+    @pytest.mark.asyncio
+    async def test_await_output_different_timeouts(self, mock_context):
+        """Test await_output tool with different timeout values"""
+        # Create a terminal session
+        create_request = OpenTerminalRequest(shell="bash")
+        create_response = await open_terminal(create_request, mock_context)
+        assert create_response.success is True
+        session_id = create_response.session_id
+
+        try:
+            # Test various timeout values
+            timeout_tests = [0.5, 1.0, 2.0, 5.0]
+
+            for timeout_val in timeout_tests:
+                # Wait for a pattern that won't appear
+                await_request = AwaitOutputRequest(
+                    session_id=session_id,
+                    pattern=r"TIMEOUT_TEST_" + str(int(timeout_val * 1000)),
+                    timeout=timeout_val,
+                )
+                await_response = await await_output(await_request, mock_context)
+
+                assert await_response.success is True
+                assert await_response.match_text is None  # Should timeout
+                assert (
+                    await_response.elapsed_time >= timeout_val - 0.1
+                )  # Allow small variance
+                assert (
+                    await_response.elapsed_time <= timeout_val + 0.5
+                )  # Allow some overhead
+
+        finally:
+            # Clean up session
+            destroy_request = DestroySessionRequest(session_id=session_id)
+            await exit_terminal(destroy_request, mock_context)
+
+    @pytest.mark.asyncio
+    async def test_await_output_build_deployment_workflow(self, mock_context):
+        """Test await_output in a realistic build/deployment workflow"""
+        # Create a terminal session
+        create_request = OpenTerminalRequest(shell="bash")
+        create_response = await open_terminal(create_request, mock_context)
+        assert create_response.success is True
+        session_id = create_response.session_id
+
+        try:
+            # Simulate a build process
+            build_commands = [
+                ("echo 'Starting build process...'\n", r"Starting build"),
+                (
+                    "sleep 0.5 && echo 'Build completed successfully'\n",
+                    r"Build completed|Build failed",
+                ),
+                ("echo 'Ready for deployment'\n", r"Ready for deployment"),
+            ]
+
+            for command, expected_pattern in build_commands:
+                # Send command
+                input_request = SendInputRequest(
+                    session_id=session_id, input_text=command
+                )
+                await send_input(input_request, mock_context)
+
+                # Wait for expected output
+                await_request = AwaitOutputRequest(
+                    session_id=session_id, pattern=expected_pattern, timeout=3.0
+                )
+                await_response = await await_output(await_request, mock_context)
+
+                assert (
+                    await_response.success is True
+                ), f"Failed waiting for: {expected_pattern}"
+                assert await_response.match_text is not None
+                assert await_response.elapsed_time < 3.0
+
+        finally:
+            # Clean up session
+            destroy_request = DestroySessionRequest(session_id=session_id)
+            await exit_terminal(destroy_request, mock_context)
+
+    @pytest.mark.asyncio
+    async def test_await_output_python_repl_interaction(self, mock_context):
+        """Test await_output with Python REPL interactions"""
+        # Create a Python terminal session
+        create_request = OpenTerminalRequest(shell="python3")
+        create_response = await open_terminal(create_request, mock_context)
+        assert create_response.success is True
+        session_id = create_response.session_id
+
+        try:
+            # Wait for Python prompt
+            prompt_request = AwaitOutputRequest(
+                session_id=session_id, pattern=r">>>", timeout=5.0
+            )
+            prompt_response = await await_output(prompt_request, mock_context)
+            assert prompt_response.success is True
+            assert prompt_response.match_text == ">>>"
+
+            # Send Python command
+            input_request = SendInputRequest(
+                session_id=session_id, input_text="print('Hello from Python')\n"
+            )
+            await send_input(input_request, mock_context)
+
+            # Wait for output
+            output_request = AwaitOutputRequest(
+                session_id=session_id, pattern=r"Hello from Python", timeout=3.0
+            )
+            output_response = await await_output(output_request, mock_context)
+            assert output_response.success is True
+            assert output_response.match_text == "Hello from Python"
+
+            # Exit Python
+            exit_request = SendInputRequest(
+                session_id=session_id, input_text="exit()\n"
+            )
+            await send_input(exit_request, mock_context)
+
+        finally:
+            # Clean up session
+            try:
+                destroy_request = DestroySessionRequest(session_id=session_id)
+                await exit_terminal(destroy_request, mock_context)
+            except Exception:
+                pass  # Python session may have already exited
+
+    @pytest.mark.asyncio
+    async def test_await_output_default_timeout(self, mock_context):
+        """Test await_output tool uses default timeout when not specified"""
+        # Create a terminal session
+        create_request = OpenTerminalRequest(shell="bash")
+        create_response = await open_terminal(create_request, mock_context)
+        assert create_response.success is True
+        session_id = create_response.session_id
+
+        try:
+            # Test that default timeout is used (should be 10.0 seconds)
+            await_request = AwaitOutputRequest(
+                session_id=session_id,
+                pattern=r"NEVER_APPEARS_DEFAULT_TIMEOUT",
+                # timeout not specified, should use default of 10.0
+            )
+
+            import time
+
+            start_time = time.time()
+            await_response = await await_output(await_request, mock_context)
+            actual_elapsed = time.time() - start_time
+
+            assert await_response.success is True
+            assert await_response.match_text is None  # Should timeout
+            # Elapsed time should be close to 10 seconds (allowing some variance)
+            assert actual_elapsed >= 9.5
+            assert actual_elapsed <= 11.0
+            # Also check the elapsed_time in the response is close to 10
+            assert await_response.elapsed_time >= 9.5
+            assert await_response.elapsed_time <= 11.0
 
         finally:
             # Clean up session

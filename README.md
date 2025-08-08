@@ -235,9 +235,9 @@ send_input_delay = 0.1
 level = "INFO"
 ```
 
-## 🛠️ MCP Tools (5 Tools)
+## 🛠️ MCP Tools (6 Tools)
 
-The server provides 5 MCP tools for complete terminal session lifecycle management:
+The server provides 6 MCP tools for complete terminal session lifecycle management:
 
 ### **Session Management**
 
@@ -295,6 +295,32 @@ Send input to terminal sessions.
 - Raw input support with escape sequences
 - No automatic timeouts (agent-controlled timing)
 - Parallel user input possible via web interface
+
+#### **`await_output`** 🆕
+Wait for specific regex patterns to appear in terminal output.
+
+**Parameters:**
+- `session_id`: Session to monitor
+- `pattern`: Regular expression pattern to match
+- `timeout`: Maximum wait time in seconds (default: 10.0)
+
+**Returns:**
+- `match_text`: The matched text if pattern found, `null` if timeout
+- `screen_content`: Current screen content when match occurred or timeout reached
+- `elapsed_time`: Time elapsed before match or timeout
+- `success`: Whether operation completed without errors
+
+**Features:**
+- **Regex pattern matching**: Full regular expression support for flexible output detection
+- **Configurable timeout**: Control maximum wait time per pattern
+- **Non-blocking**: Polls every 100ms without blocking other operations
+- **Precise timing**: Returns exact elapsed time for performance optimization
+
+**Use Cases:**
+- Wait for build completion: `await_output(session_id, r"Build successful|BUILD SUCCESS", 300.0)`
+- Monitor for errors: `await_output(session_id, r"ERROR|FAILED|Exception", 30.0)`  
+- Detect prompt return: `await_output(session_id, r"\$\s*$|>\s*$", 5.0)`
+- Wait for program startup: `await_output(session_id, r"Server running on|Listening on", 60.0)`
 
 ### **Session Creation**
 
@@ -406,7 +432,7 @@ When web interface is enabled:
 ```
 terminal-control-mcp/
 ├── src/terminal_control_mcp/
-│   ├── main.py                  # FastMCP server with 5 MCP tools
+│   ├── main.py                  # FastMCP server with 6 MCP tools
 │   ├── session_manager.py       # Session lifecycle management
 │   ├── interactive_session.py   # Tmux/libtmux process control
 │   ├── terminal_utils.py        # Terminal window management
@@ -478,7 +504,7 @@ python tests/conftest.py
 
 - ✅ **Tmux Integration**: Complete libtmux-based terminal control
 - ✅ **Web Interface**: Real-time xterm.js with WebSocket synchronization
-- ✅ **Agent Control**: 5 MCP tools for complete session management
+- ✅ **Agent Control**: 6 MCP tools for complete session management
 - ✅ **Security Layer**: Multi-layer validation and audit logging
 - ✅ **TOML Configuration**: Structured configuration with environment overrides
 - ✅ **Type Safety**: Full Pydantic models and mypy coverage
