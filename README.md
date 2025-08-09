@@ -23,6 +23,7 @@ A modern MCP server that enables AI agents to control terminal sessions through 
 - **Command Filtering**: Block dangerous operations (`rm -rf /`, `sudo`, disk formatting, etc.)
 - **Path Protection**: Restrict access to user directories only
 - **Rate Limiting**: 60 calls/minute with session limits (max 50 concurrent)
+- **History Isolation**: Prevent terminal sessions from polluting system history
 - **Audit Logging**: Complete security event tracking
 - **Input Validation**: Multi-layer validation for all inputs
 - **Configurable Levels**: Off, low, medium, high protection levels
@@ -159,9 +160,27 @@ max_sessions = 50           # Maximum concurrent sessions
 
 ```toml
 [session]
-default_shell = "bash"   # Default shell for new sessions
-timeout = 30            # Session startup timeout (seconds)
+default_shell = "bash"                      # Default shell for new sessions
+timeout = 30                                # Session startup timeout (seconds)
+isolate_history = true                      # Prevent sessions from polluting system history
+history_file_prefix = "mcp_session_history" # Prefix for isolated history files
 ```
+
+**History Isolation Features:**
+- **Automatic Isolation**: Each session gets isolated history files in temporary directories
+- **Multi-Shell Support**: Supports bash, zsh, fish, csh, tcsh, Python REPL, Node.js, PostgreSQL, MySQL
+- **Session-Specific Files**: History files are prefixed with session IDs for complete isolation
+- **Automatic Cleanup**: All history files are automatically deleted when sessions terminate
+- **Configurable**: Can be disabled via `isolate_history = false` if system history is preferred
+
+**Supported Applications:**
+- **Bash**: `HISTFILE`, `HISTCONTROL`, `HISTSIZE`, `HISTFILESIZE`
+- **Zsh**: `HISTFILE`, `ZDOTDIR`, `SAVEHIST`, `HISTSIZE`  
+- **Fish**: `XDG_CONFIG_HOME`, `XDG_DATA_HOME`
+- **Python**: `PYTHONSTARTUP` with readline configuration
+- **Node.js**: `NODE_REPL_HISTORY`
+- **PostgreSQL**: `PSQL_HISTORY`
+- **MySQL**: `MYSQL_HISTFILE`
 
 #### **[terminal] - Terminal Settings**
 

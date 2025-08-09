@@ -54,6 +54,8 @@ class SessionSettings(BaseModel):
 
     default_shell: str
     timeout: int
+    isolate_history: bool = True
+    history_file_prefix: str = "mcp_session_history"
 
 
 class LoggingSettings(BaseModel):
@@ -175,6 +177,14 @@ class ServerConfig(BaseSettings):
     @property
     def session_timeout(self) -> int:
         return self.session.timeout
+
+    @property
+    def isolate_history(self) -> bool:
+        return self.session.isolate_history
+
+    @property
+    def history_file_prefix(self) -> str:
+        return self.session.history_file_prefix
 
     @property
     def log_level(self) -> str:

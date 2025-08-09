@@ -40,17 +40,36 @@ class InteractiveSession:
         self.environment = environment or {}
         self.working_directory = working_directory
 
-        # tmux session name (must be unique)
-        self.tmux_session_name = f"mcp_{session_id}"
+        self._initialize_tmux_config()
+        self._initialize_file_paths()
+        self._initialize_history_isolation()
+        self._initialize_session_objects()
 
-        # Terminal output stream file for web interface
-        # Use appropriate temp directory for different platforms
-        temp_dir = Path(tempfile.gettempdir())
-        self.output_stream_file = temp_dir / f"tmux_stream_{session_id}.log"
-
+    def _initialize_tmux_config(self) -> None:
+        """Initialize tmux-related configuration"""
+        self.tmux_session_name = f"mcp_{self.session_id}"
         self.is_active = False
         self.exit_code: int | None = None
 
+    def _initialize_file_paths(self) -> None:
+        """Initialize file paths for session"""
+        temp_dir = Path(tempfile.gettempdir())
+        self.output_stream_file = temp_dir / f"tmux_stream_{self.session_id}.log"
+
+    def _initialize_history_isolation(self) -> None:
+        """Initialize history isolation if enabled"""
+        config = ServerConfig()
+        if config.isolate_history:
+            temp_dir = Path(tempfile.gettempdir())
+            self.history_dir: Path | None = temp_dir / f"mcp_history_{self.session_id}"
+            self.history_dir.mkdir(exist_ok=True)
+            self.isolated_history_files: dict[str, Path] = {}
+        else:
+            self.history_dir = None
+            self.isolated_history_files = {}
+
+    def _initialize_session_objects(self) -> None:
+        """Initialize session objects and logging"""
         # libtmux objects
         self.tmux_server: libtmux.Server | None = None
         self.tmux_session: libtmux.Session | None = None
@@ -58,7 +77,7 @@ class InteractiveSession:
         self.tmux_pane: libtmux.Pane | None = None
 
         # Interaction logging
-        self.interaction_logger = InteractionLogger(session_id)
+        self.interaction_logger = InteractionLogger(self.session_id)
 
         # Track last input timestamp for "since_input" mode
         self.last_input_timestamp: float = 0
@@ -92,8 +111,116 @@ class InteractiveSession:
                 "PYTHONUNBUFFERED": "1",
             }
         )
+
+        # Apply history isolation if enabled
+        config = ServerConfig()
+        if config.isolate_history and self.history_dir:
+            self._configure_history_isolation(env)
+
         env.update(self.environment)
         return env
+
+    def _configure_history_isolation(self, env: dict[str, str]) -> None:
+        """Configure isolated history files for different shells"""
+        if not self.history_dir:
+            return
+
+        config = ServerConfig()
+        self._create_shell_history_files(config)
+        self._configure_shell_environments(env, config)
+        self._configure_application_histories(env, config)
+
+        logger.debug(f"Configured history isolation for session {self.session_id} in {self.history_dir}")
+
+    def _create_shell_history_files(self, config: ServerConfig) -> None:
+        """Create isolated history files for different shells"""
+        assert self.history_dir is not None
+        history_files = {
+            "bash": self.history_dir / f"{config.history_file_prefix}_bash_{self.session_id}",
+            "zsh": self.history_dir / f"{config.history_file_prefix}_zsh_{self.session_id}",
+            "fish": self.history_dir / f"{config.history_file_prefix}_fish_{self.session_id}",
+            "csh": self.history_dir / f"{config.history_file_prefix}_csh_{self.session_id}",
+            "tcsh": self.history_dir / f"{config.history_file_prefix}_tcsh_{self.session_id}",
+        }
+
+        self.isolated_history_files = history_files
+
+        # Create empty history files
+        for _shell, hist_file in history_files.items():
+            hist_file.touch(exist_ok=True)
+
+    def _configure_shell_environments(self, env: dict[str, str], config: ServerConfig) -> None:
+        """Configure shell-specific environment variables"""
+        history_files = self.isolated_history_files
+
+        # Bash configuration
+        env.update({
+            "HISTFILE": str(history_files["bash"]),
+            "HISTCONTROL": "ignoreboth",
+            "HISTSIZE": "1000",
+            "HISTFILESIZE": "2000",
+        })
+
+        # Zsh configuration
+        env.update({
+            "HISTFILE": str(history_files["zsh"]),
+            "ZDOTDIR": str(self.history_dir),
+            "SAVEHIST": "1000",
+            "HISTSIZE": "1000",
+        })
+
+        # Fish configuration
+        env.update({
+            "XDG_CONFIG_HOME": str(self.history_dir),
+            "XDG_DATA_HOME": str(self.history_dir),
+        })
+
+        # C shell variants
+        env.update({
+            "history": "1000",
+            "savehist": "1000",
+        })
+
+    def _configure_application_histories(self, env: dict[str, str], config: ServerConfig) -> None:
+        """Configure history files for various applications"""
+        assert self.history_dir is not None
+
+        # Python REPL history
+        python_hist = self.history_dir / f"{config.history_file_prefix}_python_{self.session_id}"
+        python_hist.touch(exist_ok=True)
+        env["PYTHONSTARTUP"] = self._create_python_startup_script(python_hist)
+
+        # Node.js REPL history
+        node_hist = self.history_dir / f"{config.history_file_prefix}_node_{self.session_id}"
+        node_hist.touch(exist_ok=True)
+        env["NODE_REPL_HISTORY"] = str(node_hist)
+
+        # PostgreSQL history
+        psql_hist = self.history_dir / f"{config.history_file_prefix}_psql_{self.session_id}"
+        psql_hist.touch(exist_ok=True)
+        env["PSQL_HISTORY"] = str(psql_hist)
+
+        # MySQL history
+        mysql_hist = self.history_dir / f"{config.history_file_prefix}_mysql_{self.session_id}"
+        mysql_hist.touch(exist_ok=True)
+        env["MYSQL_HISTFILE"] = str(mysql_hist)
+
+    def _create_python_startup_script(self, python_hist: Path) -> str:
+        """Create a Python startup script to set history file"""
+        assert self.history_dir is not None
+        startup_script = self.history_dir / "python_startup.py"
+        startup_content = f'''
+import os
+import atexit
+try:
+    import readline
+    readline.read_history_file("{python_hist}")
+    atexit.register(readline.write_history_file, "{python_hist}")
+except (ImportError, FileNotFoundError):
+    pass
+'''
+        startup_script.write_text(startup_content)
+        return str(startup_script)
 
     async def _create_tmux_session(self, env: dict[str, str]) -> None:
         """Create the tmux server and session"""
@@ -184,19 +311,20 @@ class InteractiveSession:
         """Configure environment variables in the tmux session"""
         loop = asyncio.get_event_loop()
 
+        # Set all environment variables that are not from the base system env
+        base_env_keys = set(os.environ.keys())
         for key, value in env.items():
-            if key not in ["LC_ALL", "LANG", "LC_MESSAGES", "PYTHONUNBUFFERED"]:
-                continue
+            # Only set custom env vars (not inherited from system) or important LC/LANG vars
+            if key not in base_env_keys or key in ["LC_ALL", "LANG", "LC_MESSAGES", "PYTHONUNBUFFERED"]:
+                def set_env(k: str, v: str) -> None:
+                    assert self.tmux_session is not None
+                    self.tmux_session.set_environment(k, v)
 
-            def set_env(k: str, v: str) -> None:
-                assert self.tmux_session is not None
-                self.tmux_session.set_environment(k, v)
+                # Use local variables to avoid closure issues
+                def make_env_setter(k: str, v: str) -> Callable[[], None]:
+                    return lambda: set_env(k, v)
 
-            # Use local variables to avoid closure issues
-            def make_env_setter(k: str, v: str) -> Callable[[], None]:
-                return lambda: set_env(k, v)
-
-            await loop.run_in_executor(None, make_env_setter(key, value))
+                await loop.run_in_executor(None, make_env_setter(key, value))
 
     async def _execute_initial_command(self) -> None:
         """Execute the initial command if it's not just bash"""
@@ -408,17 +536,47 @@ class InteractiveSession:
 
     def _cleanup_session_resources(self) -> None:
         """Clean up all session resources"""
+        self._reset_session_state()
+        self._cleanup_output_stream()
+        self._cleanup_history_isolation()
+
+    def _reset_session_state(self) -> None:
+        """Reset session state and tmux objects"""
         self.is_active = False
         self.tmux_pane = None
         self.tmux_window = None
         self.tmux_session = None
         self.tmux_server = None
 
+    def _cleanup_output_stream(self) -> None:
+        """Clean up output stream file"""
         try:
             if self.output_stream_file.exists():
                 self.output_stream_file.unlink()
         except Exception:
             pass  # Don't fail termination if cleanup fails
+
+    def _cleanup_history_isolation(self) -> None:
+        """Clean up history isolation files and directory"""
+        if not (self.history_dir and self.history_dir.exists()):
+            return
+
+        try:
+            import shutil
+            shutil.rmtree(self.history_dir, ignore_errors=True)
+            logger.debug(f"Cleaned up history directory for session {self.session_id}")
+        except Exception as e:
+            logger.debug(f"Failed to clean up history directory: {e}")
+            self._cleanup_individual_history_files()
+
+    def _cleanup_individual_history_files(self) -> None:
+        """Clean up individual history files if directory removal fails"""
+        try:
+            for hist_file in self.isolated_history_files.values():
+                if hist_file.exists():
+                    hist_file.unlink()
+        except Exception:
+            pass
 
     def is_process_alive(self) -> bool:
         """Check if the tmux session is still active using libtmux"""

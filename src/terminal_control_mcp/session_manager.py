@@ -2,10 +2,9 @@ import asyncio
 import logging
 import time
 import uuid
-from asyncio import Task
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Optional, Awaitable
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from .interactive_session import InteractiveSession

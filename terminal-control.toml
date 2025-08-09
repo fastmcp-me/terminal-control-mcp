@@ -15,6 +15,8 @@ max_sessions = 50
 [session]
 default_shell = "bash"
 timeout = 30
+isolate_history = true                          # Prevent terminal sessions from polluting system history
+history_file_prefix = "mcp_session_history"    # Prefix for isolated history files
 
 [logging]
 level = "INFO"  # DEBUG, INFO, WARNING, ERROR
