@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .config import SecurityLevel
+    from .settings import SecurityLevel
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ class SecurityManager:
         security_level: "SecurityLevel | None" = None,
         max_calls_per_minute: int = DEFAULT_MAX_CALLS_PER_MINUTE,
     ) -> None:
-        from .config import SecurityLevel
+        from .settings import SecurityLevel
 
         self.rate_limits: dict[str, RateLimitData] = {}
         self.max_calls_per_minute = max_calls_per_minute
@@ -125,7 +125,7 @@ class SecurityManager:
         self, tool_name: str, arguments: dict, client_id: str = "default"
     ) -> bool:
         """Validate if a tool call is allowed"""
-        from .config import SecurityLevel
+        from .settings import SecurityLevel
 
         # Security level OFF bypasses all validation
         if self.security_level == SecurityLevel.OFF:

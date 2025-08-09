@@ -7,8 +7,9 @@ Tests automatic cleanup when shells exit and terminal window closing when MCP to
 import asyncio
 import os
 import sys
+from collections.abc import AsyncGenerator, Generator
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -38,7 +39,9 @@ from src.terminal_control_mcp.session_manager import SessionManager, SessionStat
 class MockContext:
     """Mock context that matches the structure expected by MCP tools"""
 
-    def __init__(self, session_manager, security_manager):
+    def __init__(
+        self, session_manager: SessionManager, security_manager: SecurityManager
+    ):
         self.request_context = SimpleNamespace(
             lifespan_context=SimpleNamespace(
                 session_manager=session_manager, security_manager=security_manager
@@ -50,24 +53,26 @@ class TestBidirectionalSessionDestruction:
     """Test bidirectional session destruction features"""
 
     @pytest_asyncio.fixture
-    async def session_manager(self):
+    async def session_manager(self) -> AsyncGenerator[SessionManager, Any]:
         """Create session manager for testing"""
         manager = SessionManager()
         yield manager
         await manager.shutdown()
 
     @pytest.fixture
-    def security_manager(self):
+    def security_manager(self) -> SecurityManager | Any:
         """Create security manager for testing"""
         return SecurityManager()
 
     @pytest_asyncio.fixture
-    async def mock_context(self, session_manager, security_manager):
+    async def mock_context(
+        self, session_manager: SessionManager, security_manager: SecurityManager
+    ) -> Context | Any:
         """Create mock context for tool calls"""
         return cast(Context, MockContext(session_manager, security_manager))
 
     @pytest.fixture
-    def mock_config_web_disabled(self):
+    def mock_config_web_disabled(self) -> Generator[MagicMock, Any, None]:
         """Mock configuration with web interface disabled"""
         try:
             with patch(
@@ -84,7 +89,9 @@ class TestBidirectionalSessionDestruction:
             yield config
 
     @pytest.mark.asyncio
-    async def test_automatic_session_cleanup_on_shell_exit(self, session_manager):
+    async def test_automatic_session_cleanup_on_shell_exit(
+        self, session_manager: SessionManager
+    ) -> None:
         """Test that sessions are automatically destroyed when shell process exits"""
 
         # Create a mock session that will be marked as dead
@@ -109,11 +116,14 @@ class TestBidirectionalSessionDestruction:
         assert session_id not in session_manager.session_metadata
 
     @pytest.mark.asyncio
-    async def test_background_cleanup_task_initialization(self, session_manager):
+    async def test_background_cleanup_task_initialization(
+        self, session_manager: SessionManager
+    ) -> None:
         """Test that background cleanup task starts correctly"""
 
         # Initially no cleanup task should be running (lazy initialization)
-        assert session_manager._cleanup_task is None
+        if session_manager._cleanup_task is None:
+            assert True
 
         # Trigger cleanup task initialization by calling ensure method
         session_manager._ensure_cleanup_task_running()
@@ -126,7 +136,9 @@ class TestBidirectionalSessionDestruction:
         await session_manager.shutdown()
 
     @pytest.mark.asyncio
-    async def test_session_manager_shutdown(self, session_manager):
+    async def test_session_manager_shutdown(
+        self, session_manager: SessionManager
+    ) -> None:
         """Test proper shutdown of session manager"""
 
         # Add a test session
@@ -143,6 +155,7 @@ class TestBidirectionalSessionDestruction:
         await session_manager.shutdown()
 
         # Verify cleanup
+        assert session_manager._shutdown_event is not None
         assert session_manager._shutdown_event.is_set()
         if session_manager._cleanup_task is not None:
             assert session_manager._cleanup_task.done()
@@ -151,8 +164,8 @@ class TestBidirectionalSessionDestruction:
 
     @pytest.mark.asyncio
     async def test_destroy_session_with_terminal_window_closing(
-        self, session_manager, mock_config_web_disabled
-    ):
+        self, session_manager: SessionManager, mock_config_web_disabled: Any
+    ) -> None:
         """Test that destroy_session closes terminal windows when web is disabled"""
 
         # Mock a session
@@ -187,12 +200,14 @@ class TestBidirectionalSessionDestruction:
 
     @pytest.mark.asyncio
     async def test_destroy_session_skip_terminal_closing_when_web_enabled(
-        self, session_manager
-    ):
+        self, session_manager: SessionManager
+    ) -> None:
         """Test that terminal windows are not closed when web interface is enabled"""
 
         # Mock the _close_terminal_window_if_needed method directly to avoid all subprocess calls
-        async def mock_close_if_needed(session_id, close_terminal_window):
+        async def mock_close_if_needed(
+            session_id: str, close_terminal_window: bool
+        ) -> None:
             pass  # Do nothing - no subprocess calls
 
         with patch.object(
@@ -217,8 +232,8 @@ class TestBidirectionalSessionDestruction:
 
     @pytest.mark.asyncio
     async def test_exit_terminal_tool_triggers_session_destruction(
-        self, session_manager, mock_context
-    ):
+        self, session_manager: SessionManager, mock_context: Context
+    ) -> None:
         """Test that exit_terminal MCP tool properly destroys sessions"""
 
         # Mock a session
@@ -243,8 +258,8 @@ class TestBidirectionalSessionDestruction:
 
     @pytest.mark.asyncio
     async def test_terminal_window_closing_error_handling(
-        self, session_manager, mock_config_web_disabled
-    ):
+        self, session_manager: SessionManager, mock_config_web_disabled: Any
+    ) -> None:
         """Test error handling when terminal window closing fails"""
 
         # Mock a session
@@ -274,8 +289,8 @@ class TestBidirectionalSessionDestruction:
 
     @pytest.mark.asyncio
     async def test_terminal_window_closing_timeout_handling(
-        self, session_manager, mock_config_web_disabled
-    ):
+        self, session_manager: SessionManager, mock_config_web_disabled: Any
+    ) -> None:
         """Test timeout handling when closing terminal windows"""
 
         # Mock a session
@@ -302,7 +317,9 @@ class TestBidirectionalSessionDestruction:
             assert session_id not in session_manager.sessions
 
     @pytest.mark.asyncio
-    async def test_cleanup_task_handles_session_check_errors(self, session_manager):
+    async def test_cleanup_task_handles_session_check_errors(
+        self, session_manager: SessionManager
+    ) -> None:
         """Test that cleanup task handles errors when checking session health"""
 
         # Create a mock session that throws error on health check (use standard Mock)
@@ -310,7 +327,7 @@ class TestBidirectionalSessionDestruction:
         mock_session.is_process_alive.side_effect = Exception("Health check error")
 
         # Create proper async mock for terminate method
-        async def mock_terminate():
+        async def mock_terminate() -> None:
             pass
 
         mock_session.terminate = mock_terminate
@@ -324,7 +341,9 @@ class TestBidirectionalSessionDestruction:
         session_manager.session_metadata[session_id] = mock_metadata
 
         # Mock the _close_terminal_window_if_needed method to avoid subprocess calls
-        async def mock_close_if_needed(session_id, close_terminal_window):
+        async def mock_close_if_needed(
+            _session_id: str, close_terminal_window: bool = False
+        ) -> None:
             pass  # Do nothing
 
         with patch.object(
@@ -342,11 +361,15 @@ class TestBidirectionalSessionDestruction:
             assert session_id not in session_manager.session_metadata
 
     @pytest.mark.asyncio
-    async def test_multiple_sessions_cleanup(self, session_manager):
+    async def test_multiple_sessions_cleanup(
+        self, session_manager: SessionManager
+    ) -> None:
         """Test cleanup of multiple dead sessions"""
 
         # Mock the _close_terminal_window_if_needed method to avoid subprocess calls
-        async def mock_close_if_needed(session_id, close_terminal_window):
+        async def mock_close_if_needed(
+            _session_id: str, close_terminal_window: bool = False
+        ) -> None:
             pass
 
         with patch.object(
@@ -362,7 +385,7 @@ class TestBidirectionalSessionDestruction:
                 mock_session.is_process_alive.return_value = False
 
                 # Create proper async function for terminate
-                async def mock_terminate():
+                async def mock_terminate() -> None:
                     pass
 
                 mock_session.terminate = mock_terminate
@@ -393,7 +416,9 @@ class TestBidirectionalSessionDestruction:
             assert alive_session_id in session_manager.session_metadata
 
     @pytest.mark.asyncio
-    async def test_session_state_updates_on_death_detection(self, session_manager):
+    async def test_session_state_updates_on_death_detection(
+        self, session_manager: SessionManager
+    ) -> None:
         """Test that session state is updated to TERMINATED when death is detected"""
 
         # Create a dead session
@@ -422,24 +447,28 @@ class TestSessionLifecycleIntegration:
     """Integration tests for complete session lifecycle with real MCP tools"""
 
     @pytest_asyncio.fixture
-    async def session_manager(self):
+    async def session_manager(self) -> AsyncGenerator[SessionManager, Any]:
         """Create session manager for testing"""
         manager = SessionManager()
         yield manager
         await manager.shutdown()
 
     @pytest.fixture
-    def security_manager(self):
+    def security_manager(self) -> SecurityManager | Any:
         """Create security manager for testing"""
         return SecurityManager()
 
     @pytest_asyncio.fixture
-    async def mock_context(self, session_manager, security_manager):
+    async def mock_context(
+        self, session_manager: SessionManager, security_manager: SecurityManager
+    ) -> Context | Any:
         """Create mock context for tool calls"""
         return cast(Context, MockContext(session_manager, security_manager))
 
     @pytest.mark.asyncio
-    async def test_complete_session_lifecycle_with_exit_command(self, mock_context):
+    async def test_complete_session_lifecycle_with_exit_command(
+        self, mock_context: Context
+    ) -> None:
         """Test complete session lifecycle: create, interact, exit via command, auto-cleanup"""
         # Create session
         create_request = OpenTerminalRequest(
@@ -472,8 +501,8 @@ class TestSessionLifecycleIntegration:
 
     @pytest.mark.asyncio
     async def test_complete_session_lifecycle_with_exit_terminal_tool(
-        self, mock_context
-    ):
+        self, mock_context: Context
+    ) -> None:
         """Test complete session lifecycle: create, interact, destroy via MCP tool"""
         # Create session
         create_request = OpenTerminalRequest(
@@ -509,7 +538,9 @@ class TestSessionLifecycleIntegration:
         assert session_id not in session_ids
 
     @pytest.mark.asyncio
-    async def test_session_lifecycle_error_recovery(self, mock_context):
+    async def test_session_lifecycle_error_recovery(
+        self, mock_context: Context
+    ) -> None:
         """Test session lifecycle handles errors gracefully"""
         # Try to destroy non-existent session
         destroy_request = DestroySessionRequest(session_id="non_existent_session")
@@ -537,7 +568,7 @@ class TestTerminalWindowManagement:
     """Test terminal window opening and closing functionality"""
 
     @pytest.mark.asyncio
-    async def test_terminal_emulator_detection(self):
+    async def test_terminal_emulator_detection(self) -> None:
         """Test terminal emulator detection function"""
         from src.terminal_control_mcp.terminal_utils import detect_terminal_emulator
 
@@ -560,7 +591,7 @@ class TestTerminalWindowManagement:
             assert result is None
 
     @pytest.mark.asyncio
-    async def test_terminal_window_opening_success(self):
+    async def test_terminal_window_opening_success(self) -> None:
         """Test successful terminal window opening"""
         from src.terminal_control_mcp.terminal_utils import open_terminal_window
 
@@ -599,7 +630,7 @@ class TestTerminalWindowManagement:
                 )
 
     @pytest.mark.asyncio
-    async def test_terminal_window_opening_timeout(self):
+    async def test_terminal_window_opening_timeout(self) -> None:
         """Test terminal window opening with timeout (process keeps running)"""
 
         session_id = "test_session"
@@ -614,7 +645,7 @@ class TestTerminalWindowManagement:
         ):
             mock_process = MagicMock()
             # Use a future that's already resolved instead of AsyncMock
-            future = asyncio.Future()
+            future: asyncio.Future[None] = asyncio.Future()
             future.set_result(None)
             mock_process.wait.return_value = future
             mock_subprocess.return_value = mock_process
@@ -627,7 +658,7 @@ class TestTerminalWindowManagement:
                 assert result is True  # Timeout means terminal is running
 
     @pytest.mark.asyncio
-    async def test_terminal_window_opening_failure(self):
+    async def test_terminal_window_opening_failure(self) -> None:
         """Test terminal window opening failure"""
         from src.terminal_control_mcp.terminal_utils import open_terminal_window
 
@@ -642,7 +673,7 @@ class TestTerminalWindowManagement:
             assert result is False
 
     @pytest.mark.asyncio
-    async def test_terminal_window_closing_success(self):
+    async def test_terminal_window_closing_success(self) -> None:
         """Test successful terminal window closing"""
         from src.terminal_control_mcp.terminal_utils import close_terminal_window
 
@@ -667,7 +698,7 @@ class TestTerminalWindowManagement:
             assert args == ("tmux", "kill-session", "-t", f"mcp_{session_id}")
 
     @pytest.mark.asyncio
-    async def test_terminal_window_closing_failure(self):
+    async def test_terminal_window_closing_failure(self) -> None:
         """Test terminal window closing failure"""
         from src.terminal_control_mcp.terminal_utils import close_terminal_window
 

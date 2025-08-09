@@ -25,7 +25,6 @@ from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
 
-from .config import ServerConfig
 from .models import (
     AwaitOutputRequest,
     AwaitOutputResponse,
@@ -42,11 +41,12 @@ from .models import (
 )
 from .security import SecurityManager
 from .session_manager import SessionManager
+from .settings import ServerConfig
 from .terminal_utils import open_terminal_window
 from .web_server import WebServer
 
 # Load configuration from TOML file and environment variables
-config = ServerConfig.from_config_and_environment()
+config = ServerConfig()
 
 # Always import WebServer for type annotations, handle runtime availability separately
 WEB_INTERFACE_AVAILABLE = True
@@ -364,7 +364,7 @@ async def send_input(request: SendInputRequest, ctx: Context) -> SendInputRespon
     - success: bool - True if input was sent successfully
     - session_id: str - Echo of the requested session ID
     - message: str - Confirmation message
-    - screen_content: str | None - Terminal content after input
+    - screen_content: str | None - Terminal content after input (captured after a short delay to allow output to settle)
     - timestamp: str | None - When content was captured
     - process_running: bool | None - Whether process is still active
     - error: str | None - Error message if operation failed
@@ -402,6 +402,9 @@ async def send_input(request: SendInputRequest, ctx: Context) -> SendInputRespon
         # For exit commands, give extra time for tmux to detect shell exit
         if request.input_text.strip().lower() in ["exit", "exit\n"]:
             await asyncio.sleep(0.5)  # Extra delay for exit detection
+
+        # Wait for screen content to settle before capturing
+        await asyncio.sleep(config.terminal_screen_content_delay)
 
         # Capture current screen content after input (use screen mode)
         screen_content = await session.get_current_screen_content()
@@ -487,7 +490,7 @@ async def open_terminal(
     - session_id: str - Unique session identifier for other tools
     - shell: str - Shell that was started
     - web_url: str | None - URL for web interface access
-    - screen_content: str | None - Initial terminal output
+    - screen_content: str | None - Initial terminal output (captured after a short delay to allow shell initialization)
     - timestamp: str | None - ISO timestamp when content was captured
     - error: str | None - Error message if operation failed
 
@@ -506,6 +509,10 @@ async def open_terminal(
     try:
         session_id = await _create_terminal_session(app_ctx, request)
         web_url = await _get_session_web_url(session_id)
+
+        # Wait for screen content to settle before capturing
+        await asyncio.sleep(config.terminal_screen_content_delay)
+
         screen_content = await _get_initial_screen_content(app_ctx, session_id)
 
         # If web interface is disabled, automatically open a terminal window

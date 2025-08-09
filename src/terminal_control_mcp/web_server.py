@@ -17,9 +17,9 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from .config import config
 from .interactive_session import InteractiveSession
 from .session_manager import SessionManager
+from .settings import ServerConfig
 
 logger = logging.getLogger(__name__)
 
@@ -357,6 +357,7 @@ class WebServer:
         websocket_stream_position = stream_position
 
         while True:
+            config = ServerConfig()
             await asyncio.sleep(
                 config.terminal_polling_interval
             )  # Poll for responsiveness
@@ -408,38 +409,45 @@ class WebServer:
         last_content = ""
 
         while True:
+            config = ServerConfig()
             await asyncio.sleep(config.terminal_polling_interval)
 
             try:
-                # Get current content directly from tmux
                 current_content = await session.get_raw_terminal_output()
-
-                # Send only new content to avoid duplicates
-                if current_content != last_content:
-                    # Find the new content by checking what's been added
-                    if last_content and current_content.startswith(last_content):
-                        # Only new content was added at the end
-                        new_content = current_content[len(last_content) :]
-                        if new_content:
-                            await websocket.send_text(new_content)
-                    else:
-                        # Content changed significantly, send all (handles screen clears, etc.)
-                        await websocket.send_text(current_content)
-
-                    last_content = current_content
-
-                    # Update buffer for MCP tools
-                    self.terminal_buffers[session_id] = current_content
-
-                    # Update timestamp for MCP tools
-                    if session_id in self.xterm_terminals:
-                        self.xterm_terminals[session_id][
-                            "last_update"
-                        ] = asyncio.get_event_loop().time()
-
+                await self._process_content_changes(
+                    session_id, websocket, current_content, last_content
+                )
+                last_content = current_content
                 await self._check_session_termination(session_id, session)
             except Exception as e:
                 logger.debug(f"Error in direct tmux capture polling: {e}")
+
+    async def _process_content_changes(
+        self, session_id: str, websocket: WebSocket, current_content: str, last_content: str
+    ) -> None:
+        """Process changes in terminal content and update buffers"""
+        if current_content != last_content:
+            await self._send_content_diff(websocket, current_content, last_content)
+            self._update_terminal_buffers(session_id, current_content)
+
+    async def _send_content_diff(
+        self, websocket: WebSocket, current_content: str, last_content: str
+    ) -> None:
+        """Send only new content changes to websocket"""
+        if last_content and current_content.startswith(last_content):
+            # Only new content was added at the end
+            new_content = current_content[len(last_content) :]
+            if new_content:
+                await websocket.send_text(new_content)
+        else:
+            # Content changed significantly, send all (handles screen clears, etc.)
+            await websocket.send_text(current_content)
+
+    def _update_terminal_buffers(self, session_id: str, content: str) -> None:
+        """Update terminal buffers and timestamps"""
+        self.terminal_buffers[session_id] = content
+        if session_id in self.xterm_terminals:
+            self.xterm_terminals[session_id]["last_update"] = asyncio.get_event_loop().time()
 
     async def _handle_mcp_input(
         self, session_id: str, session: InteractiveSession

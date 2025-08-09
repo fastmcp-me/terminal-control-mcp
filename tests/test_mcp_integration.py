@@ -33,6 +33,13 @@ from src.terminal_control_mcp.models import (
 from src.terminal_control_mcp.security import SecurityManager
 from src.terminal_control_mcp.session_manager import SessionManager
 
+# Test timing constants
+AWAIT_OUTPUT_MAX_TIME = 5.0
+AWAIT_OUTPUT_TIMEOUT_BUFFER = 1.5
+AWAIT_OUTPUT_QUICK_TIMEOUT = 3.0
+AWAIT_OUTPUT_LONG_TIMEOUT_MIN = 9.5
+AWAIT_OUTPUT_LONG_TIMEOUT_MAX = 11.0
+
 
 class TestMCPIntegration:
     """Integration tests for MCP server functionality with security"""
@@ -656,7 +663,7 @@ class TestAwaitOutputIntegration:
             assert await_response.match_text == "MATCH_TEST_123"
             assert await_response.screen_content is not None
             assert await_response.elapsed_time >= 0.0
-            assert await_response.elapsed_time < 5.0
+            assert await_response.elapsed_time < AWAIT_OUTPUT_MAX_TIME
             assert await_response.timestamp is not None
             assert await_response.error is None
 
@@ -688,7 +695,9 @@ class TestAwaitOutputIntegration:
             assert await_response.match_text is None  # No match due to timeout
             assert await_response.screen_content is not None
             assert await_response.elapsed_time >= 1.0  # Should be close to timeout
-            assert await_response.elapsed_time < 1.5  # But not too much over
+            assert (
+                await_response.elapsed_time < AWAIT_OUTPUT_TIMEOUT_BUFFER
+            )  # But not too much over
             assert await_response.timestamp is not None
             assert await_response.error is None
 
@@ -907,7 +916,7 @@ class TestAwaitOutputIntegration:
                     await_response.success is True
                 ), f"Failed waiting for: {expected_pattern}"
                 assert await_response.match_text is not None
-                assert await_response.elapsed_time < 3.0
+                assert await_response.elapsed_time < AWAIT_OUTPUT_QUICK_TIMEOUT
 
         finally:
             # Clean up session
@@ -986,11 +995,11 @@ class TestAwaitOutputIntegration:
             assert await_response.success is True
             assert await_response.match_text is None  # Should timeout
             # Elapsed time should be close to 10 seconds (allowing some variance)
-            assert actual_elapsed >= 9.5
-            assert actual_elapsed <= 11.0
+            assert actual_elapsed >= AWAIT_OUTPUT_LONG_TIMEOUT_MIN
+            assert actual_elapsed <= AWAIT_OUTPUT_LONG_TIMEOUT_MAX
             # Also check the elapsed_time in the response is close to 10
-            assert await_response.elapsed_time >= 9.5
-            assert await_response.elapsed_time <= 11.0
+            assert await_response.elapsed_time >= AWAIT_OUTPUT_LONG_TIMEOUT_MIN
+            assert await_response.elapsed_time <= AWAIT_OUTPUT_LONG_TIMEOUT_MAX
 
         finally:
             # Clean up session
@@ -1006,34 +1015,20 @@ class TestWebInterfaceIntegration:
         """Test that list_terminal_sessions returns web URLs when web interface is enabled"""
         from unittest.mock import patch
 
-        from src.terminal_control_mcp.config import ServerConfig
+        # Mock web interface as enabled by creating a simple mock config
+        mock_config = SimpleNamespace()
+        mock_config.web_enabled = True
+        mock_config.web_host = "localhost"
+        mock_config.web_port = 8080
+        mock_config.external_web_host = None
+        mock_config.web_auto_port = False
+        mock_config.terminal_screen_content_delay = 1.0
+        mock_config.session_timeout = 30
 
-        # Mock web interface as enabled
         with (
-            patch.object(
-                ServerConfig,
-                "from_config_and_environment",
-                return_value=type(
-                    "Config",
-                    (),
-                    {
-                        "web_enabled": True,
-                        "web_host": "localhost",
-                        "web_port": 8080,
-                        "external_web_host": None,
-                        "web_auto_port": False,
-                    },
-                )(),
-            ),
             patch("src.terminal_control_mcp.main.WEB_INTERFACE_AVAILABLE", True),
-            patch("src.terminal_control_mcp.main.config") as mock_config,
+            patch("src.terminal_control_mcp.main.config", mock_config),
         ):
-
-            mock_config.web_enabled = True
-            mock_config.web_host = "localhost"
-            mock_config.web_port = 8080
-            mock_config.external_web_host = None
-            mock_config.web_auto_port = False
 
             # Create a session
             request = OpenTerminalRequest(shell="bash")
@@ -1070,30 +1065,20 @@ class TestWebInterfaceIntegration:
         """Test that list_terminal_sessions returns None web URLs when web interface is disabled"""
         from unittest.mock import patch
 
-        from src.terminal_control_mcp.config import ServerConfig
+        # Mock web interface as disabled by creating a simple mock config
+        mock_config = SimpleNamespace()
+        mock_config.web_enabled = False
+        mock_config.web_host = "localhost"
+        mock_config.web_port = 8080
+        mock_config.external_web_host = None
+        mock_config.web_auto_port = False
+        mock_config.terminal_screen_content_delay = 1.0
+        mock_config.session_timeout = 30
 
-        # Mock web interface as disabled
         with (
-            patch.object(
-                ServerConfig,
-                "from_config_and_environment",
-                return_value=type(
-                    "Config",
-                    (),
-                    {
-                        "web_enabled": False,
-                        "web_host": "localhost",
-                        "web_port": 8080,
-                        "external_web_host": None,
-                        "web_auto_port": False,
-                    },
-                )(),
-            ),
             patch("src.terminal_control_mcp.main.WEB_INTERFACE_AVAILABLE", False),
-            patch("src.terminal_control_mcp.main.config") as mock_config,
+            patch("src.terminal_control_mcp.main.config", mock_config),
         ):
-
-            mock_config.web_enabled = False
 
             # Create a session
             request = OpenTerminalRequest(shell="bash")
@@ -1127,34 +1112,20 @@ class TestWebInterfaceIntegration:
         """Test web URL generation with external host configuration"""
         from unittest.mock import patch
 
-        from src.terminal_control_mcp.config import ServerConfig
-
         # Mock web interface with external host
-        with (
-            patch.object(
-                ServerConfig,
-                "from_config_and_environment",
-                return_value=type(
-                    "Config",
-                    (),
-                    {
-                        "web_enabled": True,
-                        "web_host": "0.0.0.0",
-                        "web_port": 9000,
-                        "external_web_host": "server.example.com",
-                        "web_auto_port": False,
-                    },
-                )(),
-            ),
-            patch("src.terminal_control_mcp.main.WEB_INTERFACE_AVAILABLE", True),
-            patch("src.terminal_control_mcp.main.config") as mock_config,
-        ):
+        mock_config = SimpleNamespace()
+        mock_config.web_enabled = True
+        mock_config.web_host = "0.0.0.0"
+        mock_config.web_port = 9000
+        mock_config.external_web_host = "server.example.com"
+        mock_config.web_auto_port = False
+        mock_config.terminal_screen_content_delay = 1.0
+        mock_config.session_timeout = 30
 
-            mock_config.web_enabled = True
-            mock_config.web_host = "0.0.0.0"
-            mock_config.web_port = 9000
-            mock_config.external_web_host = "server.example.com"
-            mock_config.web_auto_port = False
+        with (
+            patch("src.terminal_control_mcp.main.WEB_INTERFACE_AVAILABLE", True),
+            patch("src.terminal_control_mcp.main.config", mock_config),
+        ):
 
             # Create a session
             request = OpenTerminalRequest(shell="bash")
@@ -1192,34 +1163,20 @@ class TestWebInterfaceIntegration:
         """Test that open_terminal returns web URL when web interface is enabled"""
         from unittest.mock import patch
 
-        from src.terminal_control_mcp.config import ServerConfig
-
         # Mock web interface as enabled
-        with (
-            patch.object(
-                ServerConfig,
-                "from_config_and_environment",
-                return_value=type(
-                    "Config",
-                    (),
-                    {
-                        "web_enabled": True,
-                        "web_host": "localhost",
-                        "web_port": 8080,
-                        "external_web_host": None,
-                        "web_auto_port": False,
-                    },
-                )(),
-            ),
-            patch("src.terminal_control_mcp.main.WEB_INTERFACE_AVAILABLE", True),
-            patch("src.terminal_control_mcp.main.config") as mock_config,
-        ):
+        mock_config = SimpleNamespace()
+        mock_config.web_enabled = True
+        mock_config.web_host = "localhost"
+        mock_config.web_port = 8080
+        mock_config.external_web_host = None
+        mock_config.web_auto_port = False
+        mock_config.terminal_screen_content_delay = 1.0
+        mock_config.session_timeout = 30
 
-            mock_config.web_enabled = True
-            mock_config.web_host = "localhost"
-            mock_config.web_port = 8080
-            mock_config.external_web_host = None
-            mock_config.web_auto_port = False
+        with (
+            patch("src.terminal_control_mcp.main.WEB_INTERFACE_AVAILABLE", True),
+            patch("src.terminal_control_mcp.main.config", mock_config),
+        ):
 
             # Create a session
             request = OpenTerminalRequest(shell="bash")

@@ -9,8 +9,8 @@ from pathlib import Path
 
 import libtmux
 
-from .config import config
 from .interaction_logger import InteractionLogger
+from .settings import ServerConfig
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +105,7 @@ class InteractiveSession:
             raise RuntimeError("tmux server is not available")
 
         tmux_server = self.tmux_server
+        config = ServerConfig()
         self.tmux_session = await loop.run_in_executor(
             None,
             lambda: tmux_server.new_session(
@@ -131,6 +132,7 @@ class InteractiveSession:
 
         loop = asyncio.get_event_loop()
         tmux_session = self.tmux_session
+        config = ServerConfig()
         await loop.run_in_executor(
             None,
             lambda: tmux_session.cmd(

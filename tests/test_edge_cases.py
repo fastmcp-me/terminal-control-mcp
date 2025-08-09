@@ -9,6 +9,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -34,7 +35,7 @@ from src.terminal_control_mcp.security import (
 class TestSecurityEdgeCases:
     """Test edge cases in security validation"""
 
-    def test_empty_and_whitespace_inputs(self, security_manager):
+    def test_empty_and_whitespace_inputs(self, security_manager: Any) -> None:
         """Test handling of empty and whitespace-only inputs"""
         # Empty strings
         assert security_manager._validate_command("") is False
@@ -50,7 +51,7 @@ class TestSecurityEdgeCases:
         except (TypeError, AttributeError):
             pass  # Expected for None input
 
-    def test_unicode_and_special_characters(self, security_manager):
+    def test_unicode_and_special_characters(self, security_manager: Any) -> None:
         """Test handling of unicode and special characters"""
         unicode_tests = [
             "echo 'Hello 世界'",  # Unicode characters
@@ -63,7 +64,7 @@ class TestSecurityEdgeCases:
             # These should be allowed (safe unicode)
             assert security_manager._validate_command(command) is True
 
-    def test_very_long_inputs(self, security_manager):
+    def test_very_long_inputs(self, security_manager: Any) -> None:
         """Test handling of very long inputs"""
         # Very long command
         long_command = "echo '" + "A" * 10000 + "'"
@@ -79,7 +80,7 @@ class TestSecurityEdgeCases:
         except OSError:
             pass  # Expected for extremely long paths
 
-    def test_binary_and_non_printable_data(self, security_manager):
+    def test_binary_and_non_printable_data(self, security_manager: Any) -> None:
         """Test handling of binary and non-printable data"""
         binary_inputs = [
             "test\x00binary",  # Null bytes
@@ -92,7 +93,7 @@ class TestSecurityEdgeCases:
             # Should be blocked due to control characters
             assert security_manager._validate_input(input_data) is False
 
-    def test_nested_injection_attempts(self, security_manager):
+    def test_nested_injection_attempts(self, security_manager: Any) -> None:
         """Test deeply nested injection attempts"""
         nested_attacks = [
             r"echo `echo `echo \`rm -rf /\``",
@@ -104,7 +105,7 @@ class TestSecurityEdgeCases:
         for attack in nested_attacks:
             assert security_manager._validate_input(attack) is False
 
-    def test_encoding_bypass_attempts(self, security_manager):
+    def test_encoding_bypass_attempts(self, security_manager: Any) -> None:
         """Test attempts to bypass validation with encoding"""
         bypass_attempts = [
             "echo \\x72\\x6d\\x20\\x2d\\x72\\x66",  # Hex encoded 'rm -rf'
@@ -124,17 +125,17 @@ class TestRateLimitingEdgeCases:
     """Test edge cases in rate limiting"""
 
     @pytest.fixture
-    def security_manager(self):
+    def security_manager(self) -> SecurityManager:
         return SecurityManager()
 
-    def test_concurrent_rate_limiting(self, security_manager):
+    def test_concurrent_rate_limiting(self, security_manager: Any) -> None:
         """Test rate limiting with concurrent requests"""
         import threading
 
         client_id = "concurrent_test"
         results = []
 
-        def make_request():
+        def make_request() -> None:
             result = security_manager._check_rate_limit(client_id)
             results.append(result)
 
@@ -157,7 +158,7 @@ class TestRateLimitingEdgeCases:
         assert successes <= DEFAULT_MAX_CALLS_PER_MINUTE  # Max allowed per minute
         assert successes > 0  # Some should succeed
 
-    def test_time_window_edge_cases(self, security_manager):
+    def test_time_window_edge_cases(self, security_manager: Any) -> None:
         """Test edge cases around time windows"""
         client_id = "time_test"
 
@@ -184,7 +185,7 @@ class TestRateLimitingEdgeCases:
             # Should be allowed
             assert security_manager._check_rate_limit(client_id) is True
 
-    def test_rate_limit_data_edge_cases(self):
+    def test_rate_limit_data_edge_cases(self) -> None:
         """Test RateLimitData with edge cases"""
         data = RateLimitData("test")
 
@@ -200,7 +201,7 @@ class TestRateLimitingEdgeCases:
         # Future calls should still be counted
         assert data.get_recent_call_count() == 1
 
-    def test_rate_limit_with_extreme_values(self, security_manager):
+    def test_rate_limit_with_extreme_values(self, security_manager: Any) -> None:
         """Test rate limiting with extreme values"""
         client_id = "extreme_test"
 
@@ -220,10 +221,12 @@ class TestPathValidationEdgeCases:
     """Test edge cases in path validation"""
 
     @pytest.fixture
-    def security_manager(self):
+    def security_manager(self) -> SecurityManager:
         return SecurityManager()
 
-    def test_symbolic_links_and_aliases(self, security_manager, temp_dir):
+    def test_symbolic_links_and_aliases(
+        self, security_manager: Any, temp_dir: str
+    ) -> None:
         """Test handling of symbolic links"""
         if os.name == "posix":  # Unix-like systems
             # Create a symbolic link
@@ -244,7 +247,7 @@ class TestPathValidationEdgeCases:
                 # Skip if symlinks not supported
                 pass
 
-    def test_relative_path_resolution(self, security_manager):
+    def test_relative_path_resolution(self, security_manager: Any) -> None:
         """Test resolution of relative paths"""
         relative_paths = [
             "./test.txt",
@@ -262,7 +265,7 @@ class TestPathValidationEdgeCases:
                 # Some paths may cause validation errors, which is expected
                 pass
 
-    def test_case_sensitivity(self, security_manager):
+    def test_case_sensitivity(self, security_manager: Any) -> None:
         """Test case sensitivity in path validation"""
         if os.name == "nt":  # Windows
             # Windows paths are case-insensitive
@@ -272,7 +275,7 @@ class TestPathValidationEdgeCases:
                 # Should be blocked regardless of case
                 assert security_manager._validate_path(path) is False
 
-    def test_path_normalization_bypasses(self, security_manager):
+    def test_path_normalization_bypasses(self, security_manager: Any) -> None:
         """Test attempts to bypass path validation with normalization"""
         bypass_attempts = [
             "/etc//passwd",  # Double slashes
@@ -293,10 +296,10 @@ class TestEnvironmentEdgeCases:
     """Test edge cases in environment variable validation"""
 
     @pytest.fixture
-    def security_manager(self):
+    def security_manager(self) -> SecurityManager:
         return SecurityManager()
 
-    def test_environment_case_sensitivity(self, security_manager):
+    def test_environment_case_sensitivity(self, security_manager: Any) -> None:
         """Test case sensitivity in environment variable names"""
         # Test mixed case versions of protected variables
         # HOME should definitely be blocked
@@ -305,7 +308,7 @@ class TestEnvironmentEdgeCases:
         # Test case sensitivity - depends on system
         # On most Unix systems, environment variables are case-sensitive
 
-    def test_empty_environment_values(self, security_manager):
+    def test_empty_environment_values(self, security_manager: Any) -> None:
         """Test empty and None environment values"""
         test_cases = [
             {"TEST_VAR": ""},  # Empty string
@@ -316,13 +319,15 @@ class TestEnvironmentEdgeCases:
         for env in test_cases:
             try:
                 result = security_manager._validate_environment(env)
-                if None in env.values() or "" in env.keys():
+                if (hasattr(env, "values") and None in env.values()) or (
+                    hasattr(env, "keys") and "" in env.keys()
+                ):
                     assert result is False
             except (TypeError, AttributeError):
                 # Expected for invalid types
                 pass
 
-    def test_environment_with_special_characters(self, security_manager):
+    def test_environment_with_special_characters(self, security_manager: Any) -> None:
         """Test environment variables with special characters"""
         special_char_env = {
             "VAR_WITH_UNICODE": "café",
@@ -345,14 +350,16 @@ class TestAsyncEdgeCases:
     """Test edge cases in async operations"""
 
     @pytest.mark.asyncio
-    async def test_rapid_session_creation_destruction(self, mock_context):
+    async def test_rapid_session_creation_destruction(self, mock_context: Any) -> None:
         """Test rapid creation and destruction of sessions"""
         session_ids = []
 
         try:
             # Create multiple sessions rapidly
             for _ in range(5):
-                request = OpenTerminalRequest(shell="bash")
+                request = OpenTerminalRequest(
+                    shell="bash", working_directory=None, environment=None
+                )
                 result = await open_terminal(request, mock_context)
                 if result.success:
                     session_ids.append(result.session_id)
@@ -383,10 +390,12 @@ class TestAsyncEdgeCases:
             raise e
 
     @pytest.mark.asyncio
-    async def test_timeout_edge_cases(self, mock_context):
+    async def test_timeout_edge_cases(self, mock_context: Any) -> None:
         """Test various timeout scenarios"""
         # Very short timeout
-        request = OpenTerminalRequest(shell="bash")
+        request = OpenTerminalRequest(
+            shell="bash", working_directory=None, environment=None
+        )
 
         result = await open_terminal(request, mock_context)
         # May succeed or fail depending on timing
@@ -407,10 +416,12 @@ class TestAsyncEdgeCases:
             await exit_terminal(destroy_request, mock_context)
 
     @pytest.mark.asyncio
-    async def test_concurrent_operations_same_session(self, mock_context):
+    async def test_concurrent_operations_same_session(self, mock_context: Any) -> None:
         """Test concurrent operations on the same session"""
         # Start a session
-        request = OpenTerminalRequest(shell="python3")
+        request = OpenTerminalRequest(
+            shell="python3", working_directory=None, environment=None
+        )
         result = await open_terminal(request, mock_context)
 
         if not result.success:
@@ -439,7 +450,9 @@ class TestAsyncEdgeCases:
                 SendInputRequest,
             )
 
-            screen_request = GetScreenContentRequest(session_id=session_id)
+            screen_request = GetScreenContentRequest(
+                session_id=session_id, content_mode="screen", line_count=None
+            )
             tasks.append(get_screen_content(screen_request, mock_context))
 
             # Send input
@@ -472,10 +485,10 @@ class TestErrorHandling:
     """Test error handling in various scenarios"""
 
     @pytest.fixture
-    def security_manager(self):
+    def security_manager(self) -> SecurityManager:
         return SecurityManager()
 
-    def test_malformed_requests(self, security_manager):
+    def test_malformed_requests(self, security_manager: Any) -> None:
         """Test handling of malformed requests"""
         # Test with various malformed arguments
         malformed_args = [
@@ -498,7 +511,7 @@ class TestErrorHandling:
                 # Expected for malformed input
                 pass
 
-    def test_filesystem_errors(self, security_manager):
+    def test_filesystem_errors(self, security_manager: Any) -> None:
         """Test handling of filesystem-related errors"""
         # Test with non-existent paths
         nonexistent_paths = [
@@ -515,7 +528,7 @@ class TestErrorHandling:
                 # Expected for some invalid paths
                 pass
 
-    def test_resource_exhaustion_simulation(self, security_manager):
+    def test_resource_exhaustion_simulation(self, security_manager: Any) -> None:
         """Test behavior under simulated resource exhaustion"""
         # Simulate memory pressure by creating many rate limit entries
         for i in range(1000):
@@ -527,7 +540,7 @@ class TestErrorHandling:
         assert result is True
 
     @patch("logging.getLogger")
-    def test_logging_errors(self, mock_get_logger, security_manager):
+    def test_logging_errors(self, mock_get_logger: Any, security_manager: Any) -> None:
         """Test handling of logging errors"""
         # Mock logger to raise exception
         mock_logger = MagicMock()

@@ -9,6 +9,7 @@ Tests the core command execution functionality including:
 """
 
 import asyncio
+from typing import Any
 
 import pytest
 
@@ -31,9 +32,11 @@ class TestBasicCommands:
     """Test basic non-interactive command execution"""
 
     @pytest.mark.asyncio
-    async def test_echo_command(self, mock_context):
+    async def test_echo_command(self, mock_context: Any) -> None:
         """Test simple echo command"""
-        request = OpenTerminalRequest(shell="bash")
+        request = OpenTerminalRequest(
+            shell="bash", working_directory=None, environment=None
+        )
         result = await open_terminal(request, mock_context)
 
         assert result.success
@@ -48,7 +51,9 @@ class TestBasicCommands:
 
         # Get output using screen content
         await asyncio.sleep(0.5)  # Give time for command to execute
-        screen_request = GetScreenContentRequest(session_id=result.session_id)
+        screen_request = GetScreenContentRequest(
+            session_id=result.session_id, content_mode="screen", line_count=None
+        )
         screen_result = await get_screen_content(screen_request, mock_context)
 
         if screen_result.success and screen_result.screen_content:
@@ -59,9 +64,11 @@ class TestBasicCommands:
         await exit_terminal(destroy_request, mock_context)
 
     @pytest.mark.asyncio
-    async def test_python_version(self, mock_context):
+    async def test_python_version(self, mock_context: Any) -> None:
         """Test Python version command"""
-        request = OpenTerminalRequest(shell="bash")
+        request = OpenTerminalRequest(
+            shell="bash", working_directory=None, environment=None
+        )
         result = await open_terminal(request, mock_context)
 
         assert result.success
@@ -76,7 +83,9 @@ class TestBasicCommands:
 
         # Get output using screen content
         await asyncio.sleep(0.5)  # Give time for command to execute
-        screen_request = GetScreenContentRequest(session_id=result.session_id)
+        screen_request = GetScreenContentRequest(
+            session_id=result.session_id, content_mode="screen", line_count=None
+        )
         screen_result = await get_screen_content(screen_request, mock_context)
 
         if screen_result.success and screen_result.screen_content:
@@ -87,9 +96,11 @@ class TestBasicCommands:
         await exit_terminal(destroy_request, mock_context)
 
     @pytest.mark.asyncio
-    async def test_whoami_command(self, mock_context):
+    async def test_whoami_command(self, mock_context: Any) -> None:
         """Test whoami command"""
-        request = OpenTerminalRequest(shell="bash")
+        request = OpenTerminalRequest(
+            shell="bash", working_directory=None, environment=None
+        )
         result = await open_terminal(request, mock_context)
 
         assert result.success
@@ -112,7 +123,7 @@ class TestSessionManagement:
     """Test session lifecycle management"""
 
     @pytest.mark.asyncio
-    async def test_list_sessions_initially_empty(self, mock_context):
+    async def test_list_sessions_initially_empty(self, mock_context: Any) -> None:
         """Test that session list is initially empty"""
         sessions = await list_terminal_sessions(mock_context)
         assert sessions.success
@@ -120,10 +131,12 @@ class TestSessionManagement:
         assert isinstance(sessions.sessions, list)
 
     @pytest.mark.asyncio
-    async def test_create_and_destroy_session(self, mock_context):
+    async def test_create_and_destroy_session(self, mock_context: Any) -> None:
         """Test creating and destroying a session"""
         # Create session
-        request = OpenTerminalRequest(shell="python3")
+        request = OpenTerminalRequest(
+            shell="python3", working_directory=None, environment=None
+        )
         result = await open_terminal(request, mock_context)
         assert result.success
         session_id = result.session_id
@@ -152,10 +165,12 @@ class TestInteractiveWorkflows:
     """Test interactive command workflows"""
 
     @pytest.mark.asyncio
-    async def test_python_input_workflow(self, mock_context):
+    async def test_python_input_workflow(self, mock_context: Any) -> None:
         """Test Python interactive input workflow"""
         # Start interactive command
-        request = OpenTerminalRequest(shell="python3")
+        request = OpenTerminalRequest(
+            shell="python3", working_directory=None, environment=None
+        )
         result = await open_terminal(request, mock_context)
         assert result.success
         session_id = result.session_id
@@ -173,7 +188,9 @@ class TestInteractiveWorkflows:
             await asyncio.sleep(0.5)
 
             # Get screen content
-            screen_request = GetScreenContentRequest(session_id=session_id)
+            screen_request = GetScreenContentRequest(
+                session_id=session_id, content_mode="screen", line_count=None
+            )
             screen_result = await get_screen_content(screen_request, mock_context)
             assert screen_result.success
 
@@ -198,10 +215,12 @@ class TestInteractiveWorkflows:
             await exit_terminal(destroy_request, mock_context)
 
     @pytest.mark.asyncio
-    async def test_python_choice_workflow(self, mock_context):
+    async def test_python_choice_workflow(self, mock_context: Any) -> None:
         """Test Python choice workflow"""
         # Start interactive command
-        request = OpenTerminalRequest(shell="python3")
+        request = OpenTerminalRequest(
+            shell="python3", working_directory=None, environment=None
+        )
         result = await open_terminal(request, mock_context)
         assert result.success
         session_id = result.session_id
@@ -219,7 +238,9 @@ class TestInteractiveWorkflows:
             await asyncio.sleep(0.5)
 
             # Get screen content
-            screen_request = GetScreenContentRequest(session_id=session_id)
+            screen_request = GetScreenContentRequest(
+                session_id=session_id, content_mode="screen", line_count=None
+            )
             screen_result = await get_screen_content(screen_request, mock_context)
             assert screen_result.success
 
@@ -244,10 +265,12 @@ class TestPythonREPL:
     """Test Python REPL workflows"""
 
     @pytest.mark.asyncio
-    async def test_python_repl_workflow(self, mock_context):
+    async def test_python_repl_workflow(self, mock_context: Any) -> None:
         """Test Python REPL as a complex interactive workflow"""
         # Start Python REPL
-        request = OpenTerminalRequest(shell="python3")
+        request = OpenTerminalRequest(
+            shell="python3", working_directory=None, environment=None
+        )
         result = await open_terminal(request, mock_context)
         assert result.success
         session_id = result.session_id
@@ -266,7 +289,9 @@ class TestPythonREPL:
                 await asyncio.sleep(0.5)
 
                 # Get screen content
-                screen_request = GetScreenContentRequest(session_id=session_id)
+                screen_request = GetScreenContentRequest(
+                    session_id=session_id, content_mode="screen", line_count=None
+                )
                 screen_result = await get_screen_content(screen_request, mock_context)
                 assert screen_result.success
 

@@ -8,6 +8,7 @@ import json
 import os
 import tempfile
 import time
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -24,14 +25,14 @@ from src.terminal_control_mcp.security import (
 class TestRateLimitData:
     """Test RateLimitData class functionality"""
 
-    def test_rate_limit_data_creation(self):
+    def test_rate_limit_data_creation(self) -> None:
         """Test creating RateLimitData instance"""
         data = RateLimitData("test_client")
         assert data.client_id == "test_client"
         assert data.call_timestamps == []
         assert data.get_recent_call_count() == 0
 
-    def test_add_call(self):
+    def test_add_call(self) -> None:
         """Test adding calls to rate limit data"""
         data = RateLimitData("test_client")
         now = time.time()
@@ -40,7 +41,7 @@ class TestRateLimitData:
         assert len(data.call_timestamps) == 1
         assert data.get_recent_call_count() == 1
 
-    def test_clean_old_calls(self):
+    def test_clean_old_calls(self) -> None:
         """Test cleaning old calls from rate limit data"""
         data = RateLimitData("test_client")
         now = time.time()
@@ -61,7 +62,7 @@ class TestRateLimitData:
 class TestSecurityManagerInit:
     """Test SecurityManager initialization"""
 
-    def test_security_manager_initialization(self, security_manager):
+    def test_security_manager_initialization(self, security_manager: Any) -> None:
         """Test SecurityManager initialization with proper defaults"""
         assert security_manager.max_calls_per_minute == DEFAULT_MAX_CALLS_PER_MINUTE
         assert security_manager.max_sessions == DEFAULT_MAX_SESSIONS
@@ -74,17 +75,21 @@ class TestSecurityManagerInit:
 class TestCommandValidation:
     """Test command validation security features"""
 
-    def test_validate_safe_commands(self, security_manager, safe_commands):
+    def test_validate_safe_commands(
+        self, security_manager: Any, safe_commands: list[str]
+    ) -> None:
         """Test that safe commands are allowed"""
         for command in safe_commands:
             assert security_manager._validate_command(command) is True
 
-    def test_block_dangerous_commands(self, security_manager, dangerous_commands):
+    def test_block_dangerous_commands(
+        self, security_manager: Any, dangerous_commands: list[str]
+    ) -> None:
         """Test that dangerous commands are blocked"""
         for command in dangerous_commands:
             assert security_manager._validate_command(command) is False
 
-    def test_empty_command_validation(self, security_manager):
+    def test_empty_command_validation(self, security_manager: Any) -> None:
         """Test validation of empty or whitespace commands"""
         empty_commands = ["", "   ", "\t\n", None]
         for cmd in empty_commands:
@@ -95,17 +100,21 @@ class TestCommandValidation:
 class TestInputValidation:
     """Test input validation and injection prevention"""
 
-    def test_validate_safe_input(self, security_manager, safe_inputs):
+    def test_validate_safe_input(
+        self, security_manager: Any, safe_inputs: list[str]
+    ) -> None:
         """Test that safe input strings are allowed"""
         for input_str in safe_inputs:
             assert security_manager._validate_input(input_str) is True
 
-    def test_block_injection_patterns(self, security_manager, malicious_inputs):
+    def test_block_injection_patterns(
+        self, security_manager: Any, malicious_inputs: list[str]
+    ) -> None:
         """Test blocking shell injection patterns"""
         for input_str in malicious_inputs:
             assert security_manager._validate_input(input_str) is False
 
-    def test_block_null_bytes_and_control_chars(self, security_manager):
+    def test_block_null_bytes_and_control_chars(self, security_manager: Any) -> None:
         """Test blocking null bytes and control characters"""
         malicious_inputs = [
             "test\x00",  # null byte
@@ -116,7 +125,7 @@ class TestInputValidation:
         for input_str in malicious_inputs:
             assert security_manager._validate_input(input_str) is False
 
-    def test_allow_safe_control_chars(self, security_manager):
+    def test_allow_safe_control_chars(self, security_manager: Any) -> None:
         """Test allowing safe control characters (tab, newline, carriage return)"""
         safe_control_inputs = [
             "test\ttab",
@@ -128,7 +137,9 @@ class TestInputValidation:
         for input_str in safe_control_inputs:
             assert security_manager._validate_input(input_str) is True
 
-    def test_validate_interactive_input_text(self, security_manager, safe_inputs):
+    def test_validate_interactive_input_text(
+        self, security_manager: Any, safe_inputs: list[str]
+    ) -> None:
         """Test safe interactive input text validation"""
         interactive_safe_inputs = [
             "ls -la",
@@ -145,8 +156,8 @@ class TestInputValidation:
             assert security_manager._validate_input_text(input_str) is True
 
     def test_block_dangerous_interactive_input(
-        self, security_manager, malicious_inputs
-    ):
+        self, security_manager: Any, malicious_inputs: list[str]
+    ) -> None:
         """Test blocking dangerous interactive input"""
         interactive_dangerous_inputs = [
             "sudo apt install malware",
@@ -163,22 +174,28 @@ class TestInputValidation:
 class TestPathValidation:
     """Test path validation and traversal protection"""
 
-    def test_validate_safe_paths(self, security_manager, safe_paths):
+    def test_validate_safe_paths(
+        self, security_manager: Any, safe_paths: list[str]
+    ) -> None:
         """Test validation of safe file paths"""
         for path in safe_paths:
             assert security_manager._validate_path(path) is True
 
-    def test_block_path_traversal(self, security_manager, blocked_paths):
+    def test_block_path_traversal(
+        self, security_manager: Any, blocked_paths: list[str]
+    ) -> None:
         """Test blocking path traversal attempts"""
         for path in blocked_paths:
             assert security_manager._validate_path(path) is False
 
-    def test_block_system_paths(self, security_manager, blocked_paths):
+    def test_block_system_paths(
+        self, security_manager: Any, blocked_paths: list[str]
+    ) -> None:
         """Test blocking access to system paths"""
         for path in blocked_paths:
             assert security_manager._validate_path(path) is False
 
-    def test_block_dangerous_extensions(self, security_manager):
+    def test_block_dangerous_extensions(self, security_manager: Any) -> None:
         """Test blocking files with dangerous extensions"""
         with tempfile.TemporaryDirectory() as temp_dir:
             dangerous_files = [
@@ -193,7 +210,7 @@ class TestPathValidation:
             for file_path in dangerous_files:
                 assert security_manager._validate_path(file_path) is False
 
-    def test_empty_path_validation(self, security_manager):
+    def test_empty_path_validation(self, security_manager: Any) -> None:
         """Test validation of empty paths"""
         assert security_manager._validate_path("") is False
         assert security_manager._validate_path(None) is False
@@ -202,31 +219,33 @@ class TestPathValidation:
 class TestEnvironmentValidation:
     """Test environment variable validation"""
 
-    def test_validate_safe_environment(self, security_manager, sample_environment_vars):
+    def test_validate_safe_environment(
+        self, security_manager: Any, sample_environment_vars: dict[str, dict[str, str]]
+    ) -> None:
         """Test validation of safe environment variables"""
         safe_env = sample_environment_vars["safe"]
         assert security_manager._validate_environment(safe_env) is True
 
     def test_block_protected_environment_vars(
-        self, security_manager, sample_environment_vars
-    ):
+        self, security_manager: Any, sample_environment_vars: dict[str, dict[str, str]]
+    ) -> None:
         """Test blocking modification of protected environment variables"""
         dangerous_env = sample_environment_vars["dangerous"]
         assert security_manager._validate_environment(dangerous_env) is False
 
-    def test_validate_environment_data_types(self, security_manager):
+    def test_validate_environment_data_types(self, security_manager: Any) -> None:
         """Test validation of environment variable data types"""
         # Non-string keys should be rejected
-        invalid_env = {123: "value"}
-        assert security_manager._validate_environment(invalid_env) is False
+        invalid_env_keys: dict[int, str] = {123: "value"}
+        assert security_manager._validate_environment(invalid_env_keys) is False
 
         # Non-string values should be rejected
-        invalid_env = {"KEY": 123}
-        assert security_manager._validate_environment(invalid_env) is False
+        invalid_env_vals: dict[str, int] = {"KEY": 123}
+        assert security_manager._validate_environment(invalid_env_vals) is False
 
     def test_validate_environment_with_injection(
-        self, security_manager, malicious_inputs
-    ):
+        self, security_manager: Any, malicious_inputs: list[str]
+    ) -> None:
         """Test blocking environment variables with injection patterns"""
         malicious_env = {
             "TEST": malicious_inputs[0],  # "test; rm -rf /"
@@ -240,7 +259,7 @@ class TestEnvironmentValidation:
 class TestRateLimiting:
     """Test rate limiting functionality"""
 
-    def test_rate_limit_under_threshold(self, security_manager):
+    def test_rate_limit_under_threshold(self, security_manager: Any) -> None:
         """Test that calls under the rate limit are allowed"""
         client_id = "test_client"
 
@@ -248,7 +267,7 @@ class TestRateLimiting:
         for _ in range(50):
             assert security_manager._check_rate_limit(client_id) is True
 
-    def test_rate_limit_over_threshold(self, security_manager):
+    def test_rate_limit_over_threshold(self, security_manager: Any) -> None:
         """Test that calls over the rate limit are blocked"""
         client_id = "test_client"
 
@@ -259,7 +278,7 @@ class TestRateLimiting:
         # The 61st call should be blocked
         assert security_manager._check_rate_limit(client_id) is False
 
-    def test_rate_limit_per_client(self, security_manager):
+    def test_rate_limit_per_client(self, security_manager: Any) -> None:
         """Test that rate limits are enforced per client"""
         client1 = "client1"
         client2 = "client2"
@@ -274,7 +293,7 @@ class TestRateLimiting:
         # client2 should still be allowed
         assert security_manager._check_rate_limit(client2) is True
 
-    def test_rate_limit_time_window(self, security_manager):
+    def test_rate_limit_time_window(self, security_manager: Any) -> None:
         """Test that rate limit resets after time window"""
         client_id = "test_client"
 
@@ -300,16 +319,16 @@ class TestRateLimiting:
 class TestSessionLimits:
     """Test session limit validation"""
 
-    def test_session_limit_under_threshold(self, security_manager):
+    def test_session_limit_under_threshold(self, security_manager: Any) -> None:
         """Test session creation under limit"""
         assert security_manager.validate_session_limits(25) is True
         assert security_manager.validate_session_limits(49) is True
 
-    def test_session_limit_at_threshold(self, security_manager):
+    def test_session_limit_at_threshold(self, security_manager: Any) -> None:
         """Test session creation at limit"""
         assert security_manager.validate_session_limits(50) is False
 
-    def test_session_limit_over_threshold(self, security_manager):
+    def test_session_limit_over_threshold(self, security_manager: Any) -> None:
         """Test session creation over limit"""
         assert security_manager.validate_session_limits(51) is False
         assert security_manager.validate_session_limits(100) is False
@@ -318,7 +337,7 @@ class TestSessionLimits:
 class TestToolCallValidation:
     """Test overall tool call validation"""
 
-    def test_validate_safe_open_terminal(self, security_manager):
+    def test_validate_safe_open_terminal(self, security_manager: Any) -> None:
         """Test validation of safe open_terminal calls"""
         arguments = {
             "shell": "bash",
@@ -328,7 +347,7 @@ class TestToolCallValidation:
 
         assert security_manager.validate_tool_call("open_terminal", arguments) is True
 
-    def test_block_dangerous_open_terminal(self, security_manager):
+    def test_block_dangerous_open_terminal(self, security_manager: Any) -> None:
         """Test blocking dangerous open_terminal calls"""
         dangerous_args = [
             {"shell": "bash; rm -rf /"},
@@ -340,13 +359,13 @@ class TestToolCallValidation:
         for args in dangerous_args:
             assert security_manager.validate_tool_call("open_terminal", args) is False
 
-    def test_validate_safe_send_input(self, security_manager):
+    def test_validate_safe_send_input(self, security_manager: Any) -> None:
         """Test validation of safe send_input calls"""
         arguments = {"input_text": "print('hello')"}
 
         assert security_manager.validate_tool_call("send_input", arguments) is True
 
-    def test_block_dangerous_send_input(self, security_manager):
+    def test_block_dangerous_send_input(self, security_manager: Any) -> None:
         """Test blocking dangerous send_input calls"""
         dangerous_args = [
             {"input_text": "sudo rm -rf /"},
@@ -357,7 +376,7 @@ class TestToolCallValidation:
         for args in dangerous_args:
             assert security_manager.validate_tool_call("send_input", args) is False
 
-    def test_validate_other_tool_calls(self, security_manager):
+    def test_validate_other_tool_calls(self, security_manager: Any) -> None:
         """Test validation of other tool calls (should pass)"""
         arguments = {"session_id": "test123"}
 
@@ -370,7 +389,7 @@ class TestToolCallValidation:
             security_manager.validate_tool_call("get_screen_content", arguments) is True
         )
 
-    def test_rate_limiting_in_tool_validation(self, security_manager):
+    def test_rate_limiting_in_tool_validation(self, security_manager: Any) -> None:
         """Test that rate limiting is enforced in tool call validation"""
         arguments = {"shell": "bash"}
 
@@ -392,7 +411,7 @@ class TestToolCallValidation:
 class TestAuditLogging:
     """Test security audit logging functionality"""
 
-    def test_sanitize_for_logging(self, security_manager):
+    def test_sanitize_for_logging(self, security_manager: Any) -> None:
         """Test data sanitization for logging"""
         test_data = {
             "normal_field": "normal_value",  # Changed to avoid "key" in name
@@ -421,7 +440,9 @@ class TestAuditLogging:
         # Non-strings should be converted and truncated
         assert sanitized["non_string"] == "12345"
 
-    def test_write_audit_log(self, security_manager, mock_audit_log_path):
+    def test_write_audit_log(
+        self, security_manager: Any, mock_audit_log_path: str
+    ) -> None:
         """Test writing audit logs to file"""
         log_entry = {
             "timestamp": "2023-01-01T00:00:00",
@@ -440,7 +461,7 @@ class TestAuditLogging:
             written_content = f.read().strip()
             assert json.loads(written_content) == log_entry
 
-    def test_log_security_event(self, security_manager):
+    def test_log_security_event(self, security_manager: Any) -> None:
         """Test logging security events"""
         with patch.object(security_manager, "_write_audit_log") as mock_write:
             with patch("logging.getLogger") as mock_logger:
@@ -468,7 +489,7 @@ class TestAuditLogging:
 class TestSecurityIntegration:
     """Integration tests for security features"""
 
-    def test_complete_security_workflow(self, security_manager):
+    def test_complete_security_workflow(self, security_manager: Any) -> None:
         """Test a complete security validation workflow"""
         # This should pass all security checks
         safe_arguments = {
@@ -483,7 +504,7 @@ class TestSecurityIntegration:
 
         assert result is True
 
-    def test_multi_layer_security_blocking(self, security_manager):
+    def test_multi_layer_security_blocking(self, security_manager: Any) -> None:
         """Test that multiple security layers can block malicious requests"""
         # This should be blocked by shell validation
         malicious_arguments = {
@@ -498,7 +519,7 @@ class TestSecurityIntegration:
 
         assert result is False
 
-    def test_security_across_different_clients(self, security_manager):
+    def test_security_across_different_clients(self, security_manager: Any) -> None:
         """Test security isolation between different clients"""
         safe_args = {"shell": "bash"}
 

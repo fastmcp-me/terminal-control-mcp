@@ -2,9 +2,10 @@ import asyncio
 import logging
 import time
 import uuid
+from asyncio import Task
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, Awaitable
 
 if TYPE_CHECKING:
     from .interactive_session import InteractiveSession
@@ -163,10 +164,10 @@ class SessionManager:
             return
 
         try:
-            from .config import ServerConfig
+            from .settings import ServerConfig
             from .terminal_utils import close_terminal_window as close_window_func
 
-            config = ServerConfig.from_config_and_environment()
+            config = ServerConfig()
             if not config.web_enabled:
                 await close_window_func(session_id)
         except Exception as e:

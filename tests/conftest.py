@@ -8,6 +8,7 @@ import logging
 import os
 import sys
 import tempfile
+from collections.abc import AsyncGenerator, Generator
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -25,7 +26,7 @@ from src.terminal_control_mcp.session_manager import SessionManager  # noqa: E40
 
 
 @pytest.fixture(scope="session")
-def event_loop():
+def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
     """Create an instance of the default event loop for the test session."""
     loop = asyncio.get_event_loop_policy().new_event_loop()
     yield loop
@@ -33,19 +34,19 @@ def event_loop():
 
 
 @pytest.fixture
-def security_manager():
+def security_manager() -> SecurityManager:
     """Create a SecurityManager instance for testing"""
     return SecurityManager()
 
 
 @pytest.fixture
-def session_manager():
+def session_manager() -> SessionManager:
     """Create a SessionManager instance for testing (sync version)"""
     return SessionManager()
 
 
 @pytest.fixture
-async def async_session_manager():
+async def async_session_manager() -> AsyncGenerator[SessionManager, None]:
     """Create a SessionManager instance for testing (async version with cleanup)"""
     manager = SessionManager()
     yield manager
@@ -54,7 +55,9 @@ async def async_session_manager():
 
 
 @pytest.fixture
-def app_context(security_manager, session_manager):
+def app_context(
+    security_manager: SecurityManager, session_manager: SessionManager
+) -> SimpleNamespace:
     """Create application context with managers for integration tests"""
     return SimpleNamespace(
         security_manager=security_manager,
@@ -64,7 +67,9 @@ def app_context(security_manager, session_manager):
 
 
 @pytest.fixture
-async def async_app_context(security_manager, async_session_manager):
+async def async_app_context(
+    security_manager: SecurityManager, async_session_manager: SessionManager
+) -> SimpleNamespace:
     """Create async application context with managers for integration tests"""
     return SimpleNamespace(
         security_manager=security_manager,
@@ -74,7 +79,7 @@ async def async_app_context(security_manager, async_session_manager):
 
 
 @pytest.fixture
-def mock_context(app_context):
+def mock_context(app_context: SimpleNamespace) -> SimpleNamespace:
     """Create mock MCP context for tool call tests"""
     return SimpleNamespace(
         request_context=SimpleNamespace(lifespan_context=app_context)
@@ -82,7 +87,7 @@ def mock_context(app_context):
 
 
 @pytest.fixture
-async def async_mock_context(async_app_context):
+async def async_mock_context(async_app_context: SimpleNamespace) -> SimpleNamespace:
     """Create async mock MCP context for tool call tests"""
     return SimpleNamespace(
         request_context=SimpleNamespace(lifespan_context=async_app_context)
@@ -93,14 +98,14 @@ async def async_mock_context(async_app_context):
 
 
 @pytest.fixture
-def temp_dir():
+def temp_dir() -> Generator[str, None, None]:
     """Create a temporary directory for tests"""
     with tempfile.TemporaryDirectory() as tmpdir:
         yield tmpdir
 
 
 @pytest.fixture
-def mock_audit_log_path(temp_dir):
+def mock_audit_log_path(temp_dir: str) -> Generator[str, None, None]:
     """Mock audit log path in environment"""
     audit_path = os.path.join(temp_dir, "audit.log")
     with pytest.MonkeyPatch().context() as m:
@@ -112,7 +117,7 @@ def mock_audit_log_path(temp_dir):
 
 
 @pytest.fixture
-def dangerous_commands():
+def dangerous_commands() -> list[str]:
     """Dangerous commands that should be blocked"""
     return [
         "rm -rf /",
@@ -125,13 +130,13 @@ def dangerous_commands():
 
 
 @pytest.fixture
-def safe_commands():
+def safe_commands() -> list[str]:
     """Safe commands that should be allowed"""
     return ["echo 'hello world'", "ls -la", "python3 --version", "pwd", "date"]
 
 
 @pytest.fixture
-def malicious_inputs():
+def malicious_inputs() -> list[str]:
     """Malicious input patterns for injection testing"""
     return [
         "test; rm something",  # shell injection with rm
@@ -142,25 +147,25 @@ def malicious_inputs():
 
 
 @pytest.fixture
-def safe_inputs():
+def safe_inputs() -> list[str]:
     """Safe input patterns"""
     return ["hello world", "user@example.com", "normal text with 123"]
 
 
 @pytest.fixture
-def blocked_paths():
+def blocked_paths() -> list[str]:
     """Paths that should be blocked"""
     return ["/etc/passwd", "/etc/shadow", "/boot/grub.cfg", "../../../etc/passwd"]
 
 
 @pytest.fixture
-def safe_paths(temp_dir):
+def safe_paths(temp_dir: str) -> list[str]:
     """Paths that should be allowed"""
     return ["/tmp/test.txt", f"{temp_dir}/safe_file.txt", "/var/tmp/upload.log"]
 
 
 @pytest.fixture
-def sample_environment_vars():
+def sample_environment_vars() -> dict[str, dict[str, str]]:
     """Sample environment variables for testing"""
     return {
         "safe": {"CUSTOM_VAR": "value", "DEBUG": "true"},
@@ -172,7 +177,7 @@ def sample_environment_vars():
 
 
 @pytest.fixture(scope="session", autouse=True)
-def configure_logging():
+def configure_logging() -> None:
     """Configure logging for tests"""
     log_dir = PROJECT_ROOT / "logs"
     log_dir.mkdir(exist_ok=True)
@@ -187,7 +192,7 @@ def configure_logging():
 
 
 @pytest.fixture(autouse=True)
-def clean_environment():
+def clean_environment() -> Generator[None, None, None]:
     """Clean environment variables before each test"""
     original_env = os.environ.copy()
 

@@ -8,13 +8,14 @@ import asyncio
 import logging
 import shutil
 
-from .config import config
+from .settings import ServerConfig
 
 logger = logging.getLogger(__name__)
 
 
 def detect_terminal_emulator() -> str | None:
     """Detect available terminal emulator using configuration"""
+    config = ServerConfig()
     terminal_emulators = config.terminal_emulators
 
     for emulator in terminal_emulators:
@@ -22,18 +23,19 @@ def detect_terminal_emulator() -> str | None:
         command = emulator["command"]
         if shutil.which(command[0]):
             logger.info(f"Detected terminal emulator: {name}")
-            return command[0]
+            return str(command[0])
 
     return None
 
 
 def _build_terminal_command(terminal_cmd: str, tmux_session_name: str) -> list[str]:
     """Build the appropriate command for different terminal emulators using configuration"""
+    config = ServerConfig()
     # Find the matching emulator configuration
     for emulator in config.terminal_emulators:
         if emulator["command"][0] == terminal_cmd:
             # Get the base command from configuration
-            base_command = emulator["command"].copy()
+            base_command: list[str] = list(emulator["command"])
 
             # Handle special cases for different terminal types
             if terminal_cmd == "open":  # macOS Terminal
@@ -115,6 +117,7 @@ async def _check_process_result(
 ) -> bool:
     """Check if the terminal process started successfully"""
     try:
+        config = ServerConfig()
         await asyncio.wait_for(
             process.wait(), timeout=config.terminal_process_check_timeout
         )
@@ -182,6 +185,7 @@ async def close_terminal_window(session_id: str) -> bool:
         )
 
         # Wait for the command to complete
+        config = ServerConfig()
         await asyncio.wait_for(process.wait(), timeout=config.terminal_close_timeout)
 
         if process.returncode == 0:

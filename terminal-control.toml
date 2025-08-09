@@ -26,6 +26,7 @@ close_timeout = 5.0
 process_check_timeout = 1.0
 polling_interval = 0.05
 send_input_delay = 0.1
+screen_content_delay = 1.0
 
 # Terminal emulator configuration (ordered by preference)
 emulators = [
