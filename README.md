@@ -1,3 +1,8 @@
+[![Add to Cursor](https://fastmcp.me/badges/cursor_dark.svg)](https://fastmcp.me/MCP/Details/824/terminal-control)
+[![Add to VS Code](https://fastmcp.me/badges/vscode_dark.svg)](https://fastmcp.me/MCP/Details/824/terminal-control)
+[![Add to Claude](https://fastmcp.me/badges/claude_dark.svg)](https://fastmcp.me/MCP/Details/824/terminal-control)
+[![Add to ChatGPT](https://fastmcp.me/badges/chatgpt_dark.svg)](https://fastmcp.me/MCP/Details/824/terminal-control)
+
 # Terminal Control MCP Server
 
 A modern MCP server that enables AI agents to control terminal sessions through persistent tmux-based sessions. Features real-time web interface for direct user access, comprehensive security controls, and support for interactive terminal programs including debuggers, SSH connections, and database clients.
